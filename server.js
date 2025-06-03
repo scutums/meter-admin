@@ -5,8 +5,14 @@ import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
+if (!process.env.JWT_SECRET) {
+  console.error("❌ JWT_SECRET не задан в .env");
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -28,20 +34,38 @@ try {
   console.log("✅ MySQL connected");
 } catch (err) {
   console.error("❌ MySQL connection error:", err.message);
-  process.exit(1); // останавливаем приложение
+  process.exit(1);
 }
-
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Middleware для проверки JWT
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Нет токена" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(401).json({ message: "Неверный токен" });
+  }
+}
+
+// 📄 Главная страница
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
-app.get("/api/users", async (req, res) => {
+// 🔐 Получить пользователей (защищено)
+app.get("/api/users", authMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT u.id, u.plot_number, u.full_name, u.phone,
@@ -64,10 +88,11 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-app.post("/api/readings", async (req, res) => {
+// 🔐 Добавить показание
+app.post("/api/readings", authMiddleware, async (req, res) => {
   const { user_id, reading_date, value } = req.body;
   if (!user_id || !reading_date || !value) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: "Не все поля заполнены" });
   }
 
   try {
@@ -77,11 +102,12 @@ app.post("/api/readings", async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: "Database insert error", details: err.message });
+    res.status(500).json({ error: "Ошибка вставки", details: err.message });
   }
 });
 
-app.put("/api/users/:id", async (req, res) => {
+// 🔐 Обновить пользователя
+app.put("/api/users/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { plot_number, full_name, phone } = req.body;
 
@@ -92,12 +118,37 @@ app.put("/api/users/:id", async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: "Пользователь не найден" });
     }
 
-    res.json({ message: "User updated" });
+    res.json({ message: "Пользователь обновлён" });
   } catch (err) {
-    res.status(500).json({ message: "Error updating user" });
+    res.status(500).json({ message: "Ошибка обновления", details: err.message });
+  }
+});
+
+// 🔑 Вход
+app.post("/api/login", async (req, res) => {
+  const { login, password } = req.body;
+  if (!login || !password) {
+    return res.status(400).json({ message: "Логин и пароль обязательны" });
+  }
+
+  try {
+    const [users] = await db.query("SELECT * FROM users_auth WHERE login = ?", [login]);
+    if (users.length === 0) return res.status(401).json({ message: "Неверные данные" });
+
+    const user = users[0];
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ message: "Неверные данные" });
+
+    const token = jwt.sign({ id: user.id, login: user.login }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    res.json({ token });
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка аутентификации", details: err.message });
   }
 });
 

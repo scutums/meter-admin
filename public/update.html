@@ -33,10 +33,17 @@
       <button type="submit" class="btn btn-primary">Сохранить</button>
     </form>
 
+    <button class="btn btn-secondary mt-3" onclick="logout()">Выйти</button>
+
     <div id="message" class="mt-3"></div>
   </div>
 
   <script>
+    // 🔒 Проверка токена
+    if (!localStorage.getItem("token")) {
+      window.location.href = "/login.html";
+    }
+
     const userSelect = document.getElementById("userSelect");
     const form = document.getElementById("updateForm");
     const message = document.getElementById("message");
@@ -44,21 +51,34 @@
     let currentUserId = null;
 
     async function loadUsers() {
-      const res = await fetch("/api/users");
-      const data = await res.json();
-      userSelect.innerHTML = '<option selected disabled>Выберите пользователя</option>';
-      data.forEach(user => {
-        const opt = document.createElement("option");
-        opt.value = user.id;
-        opt.textContent = `${user.plot_number} — ${user.full_name}`;
-        userSelect.appendChild(opt);
-      });
+      try {
+        const res = await fetch("/api/users", {
+          headers: {
+            "Authorization": "Bearer " + localStorage.getItem("token")
+          }
+        });
+        const data = await res.json();
+        userSelect.innerHTML = '<option selected disabled>Выберите пользователя</option>';
+        data.forEach(user => {
+          const opt = document.createElement("option");
+          opt.value = user.id;
+          opt.textContent = `${user.plot_number} — ${user.full_name}`;
+          userSelect.appendChild(opt);
+        });
+      } catch (err) {
+        message.textContent = "❌ Ошибка загрузки пользователей";
+        message.className = "text-danger";
+      }
     }
 
     userSelect.addEventListener("change", async () => {
       const id = userSelect.value;
       currentUserId = id;
-      const res = await fetch("/api/users");
+      const res = await fetch("/api/users", {
+        headers: {
+          "Authorization": "Bearer " + localStorage.getItem("token")
+        }
+      });
       const data = await res.json();
       const user = data.find(u => u.id == id);
       if (user) {
@@ -78,7 +98,10 @@
 
       const res = await fetch(`/api/users/${currentUserId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + localStorage.getItem("token")
+        },
         body: JSON.stringify(payload),
       });
 
@@ -90,6 +113,11 @@
         message.className = "text-danger";
       }
     });
+
+    function logout() {
+      localStorage.removeItem("token");
+      window.location.href = "/login.html";
+    }
 
     loadUsers();
   </script>
