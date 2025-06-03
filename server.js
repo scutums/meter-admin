@@ -83,3 +83,50 @@ app.listen(PORT, () => {
   console.log(`✅ Server is running at http://localhost:${PORT}`);
 });
 
+
+app.use(express.json()); // уже должен быть включён
+
+// Обновить пользователя
+app.put("/api/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { plot_number, full_name, phone } = req.body;
+
+  try {
+    const [result] = await db.execute(
+      "UPDATE users SET plot_number = ?, full_name = ?, phone = ? WHERE id = ?",
+      [plot_number, full_name, phone, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "User updated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error updating user" });
+  }
+});
+
+async function loadUsers() {
+  try {
+    const res = await fetch("/api/users");
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Сервер вернул не массив");
+    }
+
+    userSelect.innerHTML = '<option selected disabled>Выберите пользователя</option>';
+    data.forEach(user => {
+      const opt = document.createElement("option");
+      opt.value = user.id;
+      opt.textContent = `${user.plot_number} — ${user.full_name}`;
+      userSelect.appendChild(opt);
+    });
+  } catch (err) {
+    console.error("Ошибка загрузки пользователей:", err);
+    message.textContent = "❌ Не удалось загрузить список пользователей";
+    message.className = "text-danger";
+  }
+}
