@@ -43,7 +43,7 @@
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("token", data.token);
-        window.location.href = "/update.html"; // или на другую защищённую страницу
+        window.location.href = "/index.html"; // или на другую защищённую страницу
       } else {
         message.textContent = "Неверный логин или пароль";
       }
