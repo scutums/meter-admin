@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Быстрый ввод оплат</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    .table-success input {
+      background-color: #d1e7dd;
+    }
+    .small-cell {
+      font-size: 0.85rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <h2 class="mb-4">💳 Быстрый ввод оплат</h2>
+
+    <div class="mb-3">
+      <label for="common-date" class="form-label">Дата оплаты</label>
+      <input type="date" id="common-date" class="form-control" />
+    </div>
+
+    <form id="bulk-payment-form">
+      <table class="table table-bordered table-hover align-middle">
+        <thead class="table-primary text-center">
+          <tr>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Послед. показание</th>
+            <th>Дата</th>
+            <th>Оплачено до</th>
+            <th>Дата</th>
+            <th>Израсходовано</th>
+            <th>К оплате</th>
+            <th>Оплачено (кВт⋅ч)</th>
+            <th>Действие</th>
+          </tr>
+        </thead>
+        <tbody id="payment-table-body"></tbody>
+      </table>
+      <button type="submit" class="btn btn-success">💾 Сохранить всё</button>
+    </form>
+  </div>
+
+  <script>
+    const TARIFF = 4.75;
+
+    async function fetchUsers() {
+      const res = await fetch("/api/users", {
+        headers: { Authorization: "Bearer " + localStorage.getItem("token") },
+      });
+      return await res.json();
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return "-";
+      const date = new Date(dateStr);
+      return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+    }
+
+    async function loadTable() {
+      const users = await fetchUsers();
+      const tbody = document.getElementById("payment-table-body");
+      tbody.innerHTML = "";
+
+      users.forEach(u => {
+        const consumption =
+          u.last_reading != null && u.paid_kwh != null
+            ? u.last_reading - u.paid_kwh
+            : "-";
+        const amount = typeof consumption === "number" ? (consumption * TARIFF).toFixed(2) : "-";
+
+        const row = document.createElement("tr");
+        row.dataset.userId = u.id;
+        row.dataset.prevReading = u.last_reading || 0;
+
+        row.innerHTML = `
+          <td class="text-center">${u.plot_number}</td>
+          <td>${u.full_name}</td>
+          <td class="text-center">${u.last_reading ?? "-"}</td>
+          <td class="text-center">${formatDate(u.last_reading_date)}</td>
+          <td class="text-center">${u.paid_kwh ?? "-"}</td>
+          <td class="text-center">${formatDate(u.paid_date)}</td>
+          <td class="text-center">${consumption}</td>
+          <td class="text-center">${amount} грн</td>
+          <td><input type="number" class="form-control paid-kwh" min="0" placeholder="кВт⋅ч"></td>
+          <td><button type="button" class="btn btn-outline-secondary btn-copy-max">💰 Оплачено</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    document.getElementById("bulk-payment-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const date = document.getElementById("common-date").value;
+      const rows = document.querySelectorAll("#payment-table-body tr");
+
+      for (const row of rows) {
+        const user_id = row.dataset.userId;
+        const input = row.querySelector(".paid-kwh");
+        const paid = input.value;
+
+        if (!paid || !date) continue;
+
+        const res = await fetch("/api/payments", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + localStorage.getItem("token"),
+          },
+          body: JSON.stringify({ user_id, payment_date: date, paid_reading: row.dataset.prevReading, paid_kwh: paid }),
+        });
+
+        if (res.ok) {
+          row.classList.add("table-success");
+        } else {
+          row.classList.add("table-danger");
+        }
+      }
+
+      loadTable();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.classList.contains("btn-copy-max")) return;
+      const row = e.target.closest("tr");
+      const input = row.querySelector(".paid-kwh");
+      const max = row.dataset.prevReading;
+      input.value = max;
+    });
+
+    document.getElementById("common-date").value = new Date().toISOString().slice(0, 10);
+    loadTable();
+  </script>
+</body>
+</html>

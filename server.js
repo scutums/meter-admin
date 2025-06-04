@@ -130,7 +130,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
 
 app.post("/api/readings", authMiddleware, async (req, res) => {
   const { user_id, reading_date, value } = req.body;
-  if (!user_id || !reading_date || !value) {
+  if (!user_id || !reading_date || value == null) {
     return res.status(400).json({ error: "Не все поля заполнены" });
   }
   try {
@@ -144,7 +144,35 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
   }
 });
 
-// 🔐 Получить одного пользователя по ID
+app.post("/api/payments", authMiddleware, async (req, res) => {
+  const { user_id, payment_date, paid_reading, paid_kwh } = req.body;
+
+  if (!user_id || !payment_date || paid_reading == null || paid_kwh == null) {
+    return res.status(400).json({ error: "Не все поля заполнены" });
+  }
+
+  try {
+    const [lastReadingRows] = await db.query(
+      "SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1",
+      [user_id]
+    );
+    const last_reading = lastReadingRows.length > 0 ? lastReadingRows[0].value : 0;
+
+    const unpaid_kwh = last_reading - paid_kwh;
+    const debt = unpaid_kwh * 4.75;
+
+    await db.query(
+      `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt)
+       VALUES (?, ?, ?, ?, ?)`,
+      [user_id, payment_date, paid_reading, unpaid_kwh, debt]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка записи оплаты", details: err.message });
+  }
+});
+
 app.get("/api/users/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
