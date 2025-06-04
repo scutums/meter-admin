@@ -2,52 +2,71 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Быстрый ввод показаний</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    .filled-row {
-      background-color: #e0f7fa;
+  <script>
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login.html";
     }
-    input[type="number"]:invalid {
-      border-color: red;
-    }
-  </style>
+  </script>
 </head>
 <body class="bg-light">
+  <div id="navbar-placeholder"></div>
+
   <div class="container py-4">
     <h2 class="mb-4">⚡ Быстрый ввод показаний</h2>
 
-    <div class="mb-3 row">
-      <label for="common-date" class="col-sm-2 col-form-label">Дата для всех:</label>
-      <div class="col-sm-4">
-        <input type="date" id="common-date" class="form-control" />
-      </div>
+    <div class="mb-3">
+      <label for="common-date" class="form-label">Дата показаний</label>
+      <input type="date" id="common-date" class="form-control" value="" />
     </div>
 
     <form id="bulk-form">
-      <table class="table table-bordered table-striped align-middle">
-        <thead class="table-primary">
+      <table class="table table-bordered table-hover">
+        <thead class="table-primary text-center align-middle">
           <tr>
             <th>Участок</th>
             <th>ФИО</th>
-            <th>Послед. показание</th>
+            <th>Последнее показание</th>
             <th>Дата</th>
             <th>Новое показание</th>
+            <th>Действие</th>
           </tr>
         </thead>
         <tbody id="quick-table-body"></tbody>
       </table>
-      <button type="submit" class="btn btn-success mt-3">✅ Сохранить всё</button>
+      <button type="submit" class="btn btn-success mt-3">💾 Сохранить всё</button>
     </form>
   </div>
 
   <script>
-    const formatDate = (dateStr) => {
+    async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+
+      try {
+        const token = localStorage.getItem("token");
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        document.getElementById("username").textContent = "👤 " + payload.login;
+      } catch {
+        document.getElementById("username").textContent = "👤 Пользователь";
+      }
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("token");
+        window.location.href = "/login.html";
+      });
+    }
+
+    function formatDate(dateStr) {
       if (!dateStr) return "-";
-      const d = new Date(dateStr);
-      return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.${d.getFullYear()}`;
-    };
+      const date = new Date(dateStr);
+      if (isNaN(date)) return "-";
+      return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+    }
 
     async function loadData() {
       const res = await fetch("/api/users", {
@@ -56,101 +75,93 @@
       const users = await res.json();
       const tbody = document.getElementById("quick-table-body");
       tbody.innerHTML = "";
+      const selectedDate = document.getElementById("common-date").value;
 
       users.forEach(u => {
-        const tr = document.createElement("tr");
-        tr.dataset.userId = u.id;
-        tr.innerHTML = `
+        const row = document.createElement("tr");
+        row.dataset.userId = u.id;
+        const lastDate = u.last_reading_date?.slice(0, 10);
+        const disabled = lastDate === selectedDate;
+        const inputField = disabled ? "Уже есть" : `<input type="number" class="form-control new-value" min="${u.last_reading ?? 0}" placeholder="кВт⋅ч" data-previous="${u.last_reading ?? 0}" />`;
+        const buttonField = disabled ? "-" : `<button type="button" class="btn btn-outline-secondary btn-copy-old">Без изменений</button>`;
+
+        row.innerHTML = `
           <td>${u.plot_number}</td>
           <td>${u.full_name}</td>
           <td>${u.last_reading ?? "-"}</td>
           <td>${formatDate(u.last_reading_date)}</td>
-          <td>
-            <input type="number" class="form-control new-value" 
-              min="${u.last_reading ?? 0}" 
-              placeholder="кВт⋅ч" 
-              data-previous="${u.last_reading ?? 0}" />
-          </td>
+          <td>${inputField}</td>
+          <td>${buttonField}</td>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
       });
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-      // Установка сегодняшней даты
-      const today = new Date().toISOString().slice(0, 10);
-      document.getElementById("common-date").value = today;
+    document.getElementById("bulk-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const rows = document.querySelectorAll("#quick-table-body tr");
+      const reading_date = document.getElementById("common-date").value;
+      const results = [];
+
+      for (const row of rows) {
+        const user_id = row.dataset.userId;
+        const input = row.querySelector(".new-value");
+        const value = input?.value;
+        if (!value) continue;
+
+        try {
+          const res = await fetch("/api/readings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + localStorage.getItem("token"),
+            },
+            body: JSON.stringify({ user_id, reading_date, value }),
+          });
+
+          if (res.ok) {
+            row.classList.remove("table-danger");
+            row.classList.add("table-success");
+          } else {
+            row.classList.add("table-danger");
+          }
+        } catch (err) {
+          row.classList.add("table-danger");
+        }
+      }
 
       loadData();
-
-      // Подсветка строк
-      document.getElementById("quick-table-body").addEventListener("input", (e) => {
-        if (e.target.classList.contains("new-value")) {
-          const row = e.target.closest("tr");
-          row.classList.toggle("filled-row", !!e.target.value);
-          const prev = parseFloat(e.target.dataset.previous);
-          const curr = parseFloat(e.target.value);
-          if (curr < prev) {
-            e.target.setCustomValidity("Новое значение меньше предыдущего!");
-            e.target.reportValidity();
-          } else {
-            e.target.setCustomValidity("");
-          }
-        }
-      });
-
-      // Перемещение по Enter
-      document.getElementById("quick-table-body").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const inputs = [...document.querySelectorAll(".new-value")];
-          const idx = inputs.indexOf(e.target);
-          if (idx >= 0 && idx < inputs.length - 1) {
-            inputs[idx + 1].focus();
-          }
-        }
-      });
-
-      // Массовое сохранение
-      document.getElementById("bulk-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const rows = document.querySelectorAll("#quick-table-body tr");
-        const reading_date = document.getElementById("common-date").value;
-        const results = [];
-
-        for (const row of rows) {
-          const input = row.querySelector(".new-value");
-          const value = input.value;
-          if (!value) continue;
-          const user_id = row.dataset.userId;
-
-          try {
-            const res = await fetch("/api/readings", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: "Bearer " + localStorage.getItem("token"),
-              },
-              body: JSON.stringify({ user_id, reading_date, value }),
-            });
-
-            if (res.ok) {
-              results.push(`✅ Участок ${row.cells[0].textContent}: сохранено`);
-              row.classList.remove("table-danger");
-              row.classList.add("table-success");
-            } else {
-              row.classList.add("table-danger");
-              results.push(`❌ Ошибка для участка ${row.cells[0].textContent}`);
-            }
-          } catch (err) {
-            results.push(`❌ Ошибка сети: ${err.message}`);
-          }
-        }
-
-        alert(results.join("\n"));
-        loadData();
-      });
     });
+
+    document.addEventListener("click", async (e) => {
+      if (!e.target.classList.contains("btn-copy-old")) return;
+      const row = e.target.closest("tr");
+      const user_id = row.dataset.userId;
+      const reading_date = document.getElementById("common-date").value;
+      const value = row.cells[2].textContent;
+
+      const res = await fetch("/api/readings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + localStorage.getItem("token"),
+        },
+        body: JSON.stringify({ user_id, reading_date, value }),
+      });
+
+      if (res.ok) {
+        row.classList.add("table-success");
+        e.target.disabled = true;
+      } else {
+        row.classList.add("table-danger");
+      }
+    });
+
+    document.getElementById("common-date").addEventListener("change", loadData);
+
+    loadNavbar();
+    document.getElementById("common-date").value = new Date().toISOString().slice(0, 10);
+    loadData();
   </script>
 </body>
 </html>
