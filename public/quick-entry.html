@@ -2,129 +2,155 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Быстрый ввод показаний</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    .filled-row {
+      background-color: #e0f7fa;
+    }
+    input[type="number"]:invalid {
+      border-color: red;
+    }
+  </style>
 </head>
 <body class="bg-light">
   <div class="container py-4">
-    <h2 class="mb-4">📊 Быстрый ввод показаний</h2>
-    <table class="table table-bordered table-sm table-hover">
-      <thead class="table-primary text-center">
-        <tr>
-          <th>№</th>
-          <th>ФИО</th>
-          <th>Пред. показание</th>
-          <th>Дата</th>
-          <th>Новое</th>
-        </tr>
-      </thead>
-      <tbody id="quick-input-body"></tbody>
-    </table>
-    <button class="btn btn-success mt-3" onclick="saveAll()">Сохранить всё</button>
+    <h2 class="mb-4">⚡ Быстрый ввод показаний</h2>
+
+    <div class="mb-3 row">
+      <label for="common-date" class="col-sm-2 col-form-label">Дата для всех:</label>
+      <div class="col-sm-4">
+        <input type="date" id="common-date" class="form-control" />
+      </div>
+    </div>
+
+    <form id="bulk-form">
+      <table class="table table-bordered table-striped align-middle">
+        <thead class="table-primary">
+          <tr>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Послед. показание</th>
+            <th>Дата</th>
+            <th>Новое показание</th>
+          </tr>
+        </thead>
+        <tbody id="quick-table-body"></tbody>
+      </table>
+      <button type="submit" class="btn btn-success mt-3">✅ Сохранить всё</button>
+    </form>
   </div>
 
   <script>
-    const token = localStorage.getItem("token");
-    if (!token) window.location.href = "/login.html";
-
-    function formatDate(dateStr) {
+    const formatDate = (dateStr) => {
       if (!dateStr) return "-";
-      const date = new Date(dateStr);
-      if (isNaN(date)) return "-";
-      return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
-    }
+      const d = new Date(dateStr);
+      return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth()+1).padStart(2, '0')}.${d.getFullYear()}`;
+    };
 
-    async function loadUsers() {
+    async function loadData() {
       const res = await fetch("/api/users", {
-        headers: { Authorization: "Bearer " + token },
+        headers: { Authorization: "Bearer " + localStorage.getItem("token") }
       });
       const users = await res.json();
-      const tbody = document.getElementById("quick-input-body");
+      const tbody = document.getElementById("quick-table-body");
       tbody.innerHTML = "";
 
-      users.forEach((u, index) => {
+      users.forEach(u => {
         const tr = document.createElement("tr");
         tr.dataset.userId = u.id;
-        tr.dataset.prev = u.last_reading ?? "";
-
         tr.innerHTML = `
           <td>${u.plot_number}</td>
           <td>${u.full_name}</td>
           <td>${u.last_reading ?? "-"}</td>
           <td>${formatDate(u.last_reading_date)}</td>
           <td>
-            <input type="number" class="form-control reading-input" 
-                   id="reading-${u.id}" 
-                   oninput="markChanged(this)"
-                   onkeydown="handleEnter(event)" />
+            <input type="number" class="form-control new-value" 
+              min="${u.last_reading ?? 0}" 
+              placeholder="кВт⋅ч" 
+              data-previous="${u.last_reading ?? 0}" />
           </td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    function markChanged(input) {
-      const row = input.closest("tr");
-      row.classList.add("table-warning");
-      const prev = parseFloat(row.dataset.prev);
-      const curr = parseFloat(input.value);
-      if (!isNaN(prev) && !isNaN(curr) && curr < prev) {
-        input.classList.add("is-invalid");
-        input.title = "Новое показание меньше предыдущего!";
-      } else {
-        input.classList.remove("is-invalid");
-        input.title = "";
-      }
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+      // Установка сегодняшней даты
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById("common-date").value = today;
 
-    function handleEnter(event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        const inputs = [...document.querySelectorAll(".reading-input")];
-        const index = inputs.indexOf(event.target);
-        if (index >= 0 && index < inputs.length - 1) {
-          inputs[index + 1].focus();
+      loadData();
+
+      // Подсветка строк
+      document.getElementById("quick-table-body").addEventListener("input", (e) => {
+        if (e.target.classList.contains("new-value")) {
+          const row = e.target.closest("tr");
+          row.classList.toggle("filled-row", !!e.target.value);
+          const prev = parseFloat(e.target.dataset.previous);
+          const curr = parseFloat(e.target.value);
+          if (curr < prev) {
+            e.target.setCustomValidity("Новое значение меньше предыдущего!");
+            e.target.reportValidity();
+          } else {
+            e.target.setCustomValidity("");
+          }
         }
-      }
-    }
+      });
 
-    async function saveAll() {
-      const rows = document.querySelectorAll("#quick-input-body tr");
-      const today = new Date().toISOString().split("T")[0];
-
-      for (const row of rows) {
-        const input = row.querySelector("input");
-        const value = input.value;
-        const userId = row.dataset.userId;
-
-        if (!value) continue;
-
-        const res = await fetch("/api/readings", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            reading_date: today,
-            value: value,
-          }),
-        });
-
-        if (res.ok) {
-          input.classList.remove("is-invalid");
-          input.classList.add("is-valid");
-          row.classList.remove("table-warning");
-          row.classList.add("table-success");
-        } else {
-          input.classList.add("is-invalid");
+      // Перемещение по Enter
+      document.getElementById("quick-table-body").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const inputs = [...document.querySelectorAll(".new-value")];
+          const idx = inputs.indexOf(e.target);
+          if (idx >= 0 && idx < inputs.length - 1) {
+            inputs[idx + 1].focus();
+          }
         }
-      }
-    }
+      });
 
-    loadUsers();
+      // Массовое сохранение
+      document.getElementById("bulk-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const rows = document.querySelectorAll("#quick-table-body tr");
+        const reading_date = document.getElementById("common-date").value;
+        const results = [];
+
+        for (const row of rows) {
+          const input = row.querySelector(".new-value");
+          const value = input.value;
+          if (!value) continue;
+          const user_id = row.dataset.userId;
+
+          try {
+            const res = await fetch("/api/readings", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: "Bearer " + localStorage.getItem("token"),
+              },
+              body: JSON.stringify({ user_id, reading_date, value }),
+            });
+
+            if (res.ok) {
+              results.push(`✅ Участок ${row.cells[0].textContent}: сохранено`);
+              row.classList.remove("table-danger");
+              row.classList.add("table-success");
+            } else {
+              row.classList.add("table-danger");
+              results.push(`❌ Ошибка для участка ${row.cells[0].textContent}`);
+            }
+          } catch (err) {
+            results.push(`❌ Ошибка сети: ${err.message}`);
+          }
+        }
+
+        alert(results.join("\n"));
+        loadData();
+      });
+    });
   </script>
 </body>
 </html>
