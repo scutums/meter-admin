@@ -144,20 +144,15 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
   }
 });
 
-app.put("/api/users/:id", authMiddleware, async (req, res) => {
+// 🔐 Получить одного пользователя по ID
+app.get("/api/users/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const { plot_number, full_name, phone } = req.body;
   try {
-    const [result] = await db.execute(
-      "UPDATE users SET plot_number = ?, full_name = ?, phone = ? WHERE id = ?",
-      [plot_number, full_name, phone, id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Пользователь не найден" });
-    }
-    res.json({ message: "Пользователь обновлён" });
+    const [rows] = await db.query("SELECT id, plot_number, full_name, phone FROM users WHERE id = ?", [id]);
+    if (rows.length === 0) return res.status(404).json({ message: "Пользователь не найден" });
+    res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ message: "Ошибка обновления", details: err.message });
+    res.status(500).json({ error: "Ошибка базы данных", details: err.message });
   }
 });
 
