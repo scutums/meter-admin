@@ -18,9 +18,9 @@
   </style>
 </head>
 <body>
-   <div id="navbar-placeholder"></div>
+  <div id="navbar-placeholder"></div>
 
-  <div class="container">
+  <div class="container mt-4">
     <h2 class="mb-3">Быстрый ввод оплат</h2>
     <div class="table-responsive">
       <table class="table table-bordered table-hover" id="payments-table">
@@ -39,17 +39,14 @@
             <th>Действие</th>
           </tr>
         </thead>
-        <tbody id="payments-body">
-          <!-- строки -->
-        </tbody>
+        <tbody id="payments-body"></tbody>
       </table>
     </div>
     <button class="btn btn-success mt-3" id="save-all">💾 Сохранить всё</button>
   </div>
 
   <script>
-
- async function loadNavbar() {
+    async function loadNavbar() {
       const res = await fetch("/partials/nav.html");
       const html = await res.text();
       document.getElementById("navbar-placeholder").innerHTML = html;
@@ -66,13 +63,6 @@
         localStorage.removeItem("token");
         window.location.href = "/login.html";
       });
-    }
-
-    document.getElementById('user-name').textContent = localStorage.getItem('userLogin') || 'Пользователь';
-
-    function logout() {
-      localStorage.removeItem('token');
-      window.location.href = 'login.html';
     }
 
     async function fetchUsers() {
@@ -168,6 +158,7 @@
     });
 
     async function init() {
+      await loadNavbar();
       const [users, tariffs] = await Promise.all([fetchUsers(), fetchTariffs()]);
       const tbody = document.getElementById('payments-body');
       users.forEach(user => tbody.appendChild(createRow(user, tariffs)));
