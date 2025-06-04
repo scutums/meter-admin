@@ -4,63 +4,171 @@
   <meta charset="UTF-8" />
   <title>Быстрый ввод оплат</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background-color: #f4f4f4; }
-    input[type="number"], input[type="date"], select { width: 100%; padding: 6px; }
-    button { padding: 6px 12px; margin-top: 10px; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+
+    header {
+      background-color: #007bff;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .user-info {
+      font-size: 14px;
+    }
+
+    nav {
+      background-color: #0056b3;
+      padding: 10px 20px;
+      display: flex;
+      gap: 20px;
+    }
+
+    nav a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    nav a:hover {
+      text-decoration: underline;
+    }
+
+    main {
+      padding: 20px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f4f4f4;
+    }
+
+    input[type="number"], input[type="date"], select {
+      width: 100%;
+      padding: 6px;
+    }
+
+    button {
+      padding: 6px 12px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+      tr {
+        margin-bottom: 20px;
+      }
+      th {
+        display: none;
+      }
+      td {
+        border: none;
+        position: relative;
+        padding-left: 50%;
+      }
+      td::before {
+        position: absolute;
+        left: 10px;
+        width: 45%;
+        white-space: nowrap;
+        font-weight: bold;
+      }
+      td:nth-child(1)::before { content: "Номер участка"; }
+      td:nth-child(2)::before { content: "ФИО"; }
+      td:nth-child(3)::before { content: "Последние показания"; }
+      td:nth-child(4)::before { content: "Дата последних показаний"; }
+      td:nth-child(5)::before { content: "Последняя дата оплаты"; }
+      td:nth-child(6)::before { content: "Последние оплаченные показания"; }
+      td:nth-child(7)::before { content: "Расход после оплаты"; }
+      td:nth-child(8)::before { content: "Сумма к оплате"; }
+      td:nth-child(9)::before { content: "Оплаченные кВт⋅ч"; }
+      td:nth-child(10)::before { content: "Дата оплаты"; }
+      td:nth-child(11)::before { content: "Тариф"; }
+      td:nth-child(12)::before { content: "Действия"; }
+    }
   </style>
 </head>
 <body>
-  <h1>Быстрый ввод оплат</h1>
-  <table id="payments-table">
-    <thead>
-      <tr>
-        <th>Номер участка</th>
-        <th>ФИО</th>
-        <th>Последние показания</th>
-        <th>Дата последних показаний</th>
-        <th>Последняя дата оплаты</th>
-        <th>Последние оплаченные показания</th>
-        <th>Расход после оплаты</th>
-        <th>Сумма к оплате</th>
-        <th>Оплаченные кВт⋅ч</th>
-        <th>Дата оплаты</th>
-        <th>Тариф</th>
-        <th>Действия</th>
-      </tr>
-    </thead>
-    <tbody id="payments-body">
-      <!-- Данные будут загружены с сервера -->
-    </tbody>
-  </table>
-  <button id="save-all">💾 Сохранить всё</button>
+  <header>
+    <h1>Учёт електроэнергии</h1>
+    <div class="user-info">
+      <span id="user-name">Пользователь</span> |
+      <a href="#" onclick="logout()" style="color:white; text-decoration: underline;">Выйти</a>
+    </div>
+  </header>
+
+  <nav>
+    <a href="index.html">Главная</a>
+    <a href="quick-entry.html">Быстрый ввод показаний</a>
+    <a href="quick-payments.html">Быстрый ввод оплат</a>
+  </nav>
+
+  <main>
+    <table id="payments-table">
+      <thead>
+        <tr>
+          <th>Номер участка</th>
+          <th>ФИО</th>
+          <th>Последние показания</th>
+          <th>Дата последних показаний</th>
+          <th>Последняя дата оплаты</th>
+          <th>Последние оплаченные показания</th>
+          <th>Расход после оплаты</th>
+          <th>Сумма к оплате</th>
+          <th>Оплаченные кВт⋅ч</th>
+          <th>Дата оплаты</th>
+          <th>Тариф</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody id="payments-body">
+        <!-- Данные будут загружены с сервера -->
+      </tbody>
+    </table>
+    <button id="save-all">💾 Сохранить всё</button>
+  </main>
 
   <script>
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = "login.html";
+    }
+
+    document.getElementById('user-name').textContent = localStorage.getItem('userLogin') || 'Пользователь';
+
     async function fetchUsers() {
       const response = await fetch('/api/users', {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
       });
-      const users = await response.json();
-      return users;
+      return await response.json();
     }
 
     async function fetchTariffs() {
       const response = await fetch('/api/tariffs', {
         headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
       });
-      const tariffs = await response.json();
-      return tariffs;
-    }
-
-    function createTariffOptions(tariffs) {
-      return tariffs.map(tariff => {
-        const option = document.createElement('option');
-        option.value = tariff.value;
-        option.textContent = `${tariff.value} грн (с ${tariff.effective_date})`;
-        return option;
-      });
+      return await response.json();
     }
 
     function calculateDebt(unpaid_kwh, tariff) {
@@ -99,7 +207,6 @@
         <td><button class="pay-button">💰 Оплачено</button></td>
       `;
 
-      // Добавляем обработчики событий
       const paidReadingInput = tr.querySelector('.paid-reading');
       const tariffSelect = tr.querySelector('.tariff-select');
       const unpaidKwhCell = tr.querySelector('.unpaid-kwh');
@@ -116,9 +223,7 @@
       paidReadingInput.addEventListener('input', updateCalculations);
       tariffSelect.addEventListener('change', updateCalculations);
 
-      // Обработчик кнопки оплаты
-      const payButton = tr.querySelector('.pay-button');
-      payButton.addEventListener('click', async () => {
+      tr.querySelector('.pay-button').addEventListener('click', async () => {
         const paymentDate = tr.querySelector('.payment-date').value;
         const paidReading = parseFloat(paidReadingInput.value) || 0;
 
@@ -149,8 +254,7 @@
     document.getElementById('save-all').addEventListener('click', async () => {
       const rows = document.querySelectorAll('#payments-body tr');
       for (const tr of rows) {
-        const payButton = tr.querySelector('.pay-button');
-        payButton.click();
+        tr.querySelector('.pay-button').click();
       }
     });
 

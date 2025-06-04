@@ -204,6 +204,22 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+
+// Получить список тарифов
+app.get("/api/tariffs", authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT value, DATE_FORMAT(effective_date, '%Y-%m-%d') AS effective_date
+      FROM tariff
+      ORDER BY effective_date DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка получения тарифов", details: err.message });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`\u2705 Server is running on port ${PORT}`);
 });
