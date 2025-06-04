@@ -70,35 +70,27 @@ app.get("/api/users", authMiddleware, async (req, res) => {
         u.plot_number,
         u.full_name,
         u.phone,
-
         r_last.reading_date AS last_reading_date,
         r_last.value AS last_reading,
-
         r_prev.reading_date AS prev_reading_date,
         r_prev.value AS prev_reading,
-
         p.payment_date,
         p.paid_reading,
         p.unpaid_kwh,
         p.debt
-
       FROM users u
-
       LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS max_date
+        SELECT * FROM readings r1
+        WHERE (r1.user_id, r1.reading_date) IN (
+          SELECT user_id, MAX(reading_date)
           FROM readings
           GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
+        )
       ) r_last ON u.id = r_last.user_id
-
       LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS prev_date
+        SELECT * FROM readings r1
+        WHERE (r1.user_id, r1.reading_date) IN (
+          SELECT user_id, MAX(reading_date)
           FROM readings
           WHERE (user_id, reading_date) NOT IN (
             SELECT user_id, MAX(reading_date)
@@ -106,19 +98,16 @@ app.get("/api/users", authMiddleware, async (req, res) => {
             GROUP BY user_id
           )
           GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
+        )
       ) r_prev ON u.id = r_prev.user_id
-
       LEFT JOIN (
-        SELECT p1.*
-        FROM payments p1
-        INNER JOIN (
-          SELECT user_id, MAX(payment_date) AS max_payment
+        SELECT * FROM payments p1
+        WHERE (p1.user_id, p1.payment_date) IN (
+          SELECT user_id, MAX(payment_date)
           FROM payments
           GROUP BY user_id
-        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_payment
+        )
       ) p ON u.id = p.user_id
-
       ORDER BY u.plot_number
     `);
 
@@ -145,21 +134,29 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/payments", authMiddleware, async (req, res) => {
-  const { user_id, payment_date, paid_reading, paid_kwh } = req.body;
+  const { user_id, payment_date, paid_reading } = req.body;
 
-  if (!user_id || !payment_date || paid_reading == null || paid_kwh == null) {
-    return res.status(400).json({ error: "Не все поля заполнены" });
+  if (!user_id || !payment_date || paid_reading == null) {
+    return res.status(400).json({ message: "Не все поля заполнены" });
   }
 
   try {
-    const [lastReadingRows] = await db.query(
-      "SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1",
+    const [[lastReading]] = await db.query(
+      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
       [user_id]
     );
-    const last_reading = lastReadingRows.length > 0 ? lastReadingRows[0].value : 0;
 
-    const unpaid_kwh = last_reading - paid_kwh;
-    const debt = unpaid_kwh * 4.75;
+    if (!lastReading) {
+      return res.status(400).json({ message: "Нет показаний для пользователя" });
+    }
+
+    const unpaid_kwh = lastReading.value - paid_reading;
+
+    const [[tariffRow]] = await db.query(
+      `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
+    );
+    const tariff = tariffRow?.value || 4.75;
+    const debt = unpaid_kwh * tariff;
 
     await db.query(
       `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt)
@@ -169,7 +166,7 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: "Ошибка записи оплаты", details: err.message });
+    res.status(500).json({ message: "Ошибка при добавлении оплаты", details: err.message });
   }
 });
 
@@ -206,51 +203,6 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Дополнение серверного файла для поддержки добавления оплат с вычислением задолженности
-
-app.post("/api/payments", authMiddleware, async (req, res) => {
-  const { user_id, payment_date, paid_reading } = req.body;
-
-  if (!user_id || !payment_date || paid_reading == null) {
-    return res.status(400).json({ message: "Не все поля заполнены" });
-  }
-
-  try {
-    // Получаем последнее показание
-    const [[lastReading]] = await db.query(
-      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
-      [user_id]
-    );
-
-    if (!lastReading) {
-      return res.status(400).json({ message: "Нет показаний для пользователя" });
-    }
-
-    const unpaid_kwh = lastReading.value - paid_reading;
-
-    // Получаем актуальный тариф
-    const [[tariffRow]] = await db.query(
-      `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
-    );
-    const tariff = tariffRow?.value || 4.75;
-
-    const debt = unpaid_kwh * tariff;
-
-    await db.query(
-      `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt)
-       VALUES (?, ?, ?, ?, ?)`,
-      [user_id, payment_date, paid_reading, unpaid_kwh, debt]
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ message: "Ошибка при добавлении оплаты", details: err.message });
-  }
-});
-
-
 app.listen(PORT, () => {
   console.log(`\u2705 Server is running on port ${PORT}`);
 });
-
-
