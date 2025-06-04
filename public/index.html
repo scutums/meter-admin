@@ -4,41 +4,48 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Учёт электроэнергии</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
   <script>
+    // Проверка токена
     const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login.html";
-    }
+    if (!token) window.location.href = "/login.html";
   </script>
 </head>
 <body class="bg-light">
+
+  <!-- Навигационная панель -->
   <div id="navbar-placeholder"></div>
 
   <div class="container py-4">
     <h2 class="mb-4">📋 Участки и показания</h2>
 
-    <table class="table table-bordered table-striped table-hover">
-      <thead class="table-primary text-center align-middle">
-        <tr>
-          <th></th>
-          <th>Участок</th>
-          <th>ФИО</th>
-          <th>Телефон</th>
-          <th>Пред. показание</th>
-          <th>Дата</th>
-          <th>Послед. показание</th>
-          <th>Дата</th>
-          <th>Расход</th>
-          <th>Дата оплаты</th>
-          <th>Оплачено (кВт⋅ч)</th>
-        </tr>
-      </thead>
-      <tbody id="users-table-body"></tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped table-hover">
+        <thead class="table-primary text-center align-middle">
+          <tr>
+            <th></th>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Телефон</th>
+            <th>Пред. показание</th>
+            <th>Дата</th>
+            <th>Послед. показание</th>
+            <th>Дата</th>
+            <th>Расход</th>
+            <th>Дата оплаты</th>
+            <th>Оплачено (кВт⋅ч)</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body"></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
+    // Загружает навигационную панель
     async function loadNavbar() {
       const res = await fetch("/partials/nav.html");
       const html = await res.text();
@@ -52,12 +59,13 @@
         document.getElementById("username").textContent = "👤 Пользователь";
       }
 
-      document.getElementById("logoutBtn").addEventListener("click", () => {
+      document.getElementById("logoutBtn")?.addEventListener("click", () => {
         localStorage.removeItem("token");
         window.location.href = "/login.html";
       });
     }
 
+    // Преобразует дату в формат DD.MM.YYYY
     function formatDate(dateStr) {
       if (!dateStr) return "-";
       const date = new Date(dateStr);
@@ -65,41 +73,46 @@
       return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
     }
 
+    // Загружает данные пользователей
     async function loadUsers() {
-      const res = await fetch("/api/users", {
-        headers: { Authorization: "Bearer " + localStorage.getItem("token") },
-      });
-      const users = await res.json();
-      const tbody = document.getElementById("users-table-body");
-      tbody.innerHTML = "";
+      try {
+        const res = await fetch("/api/users", {
+          headers: { Authorization: "Bearer " + localStorage.getItem("token") },
+        });
+        const users = await res.json();
+        const tbody = document.getElementById("users-table-body");
+        tbody.innerHTML = "";
 
-      users.forEach((u) => {
-        const row = document.createElement("tr");
+        users.forEach((u) => {
+          const consumption =
+            u.last_reading != null && u.prev_reading != null
+              ? u.last_reading - u.prev_reading
+              : "-";
 
-        const consumption =
-          u.last_reading != null && u.prev_reading != null
-            ? u.last_reading - u.prev_reading
-            : "-";
-
-        row.innerHTML = `
-          <td class="text-center">
-            <a href="/edit.html?id=${u.id}" title="Редактировать">✏️</a>
-          </td>
-          <td>${u.plot_number}</td>
-          <td>${u.full_name}</td>
-          <td>${u.phone || "-"}</td>
-          <td>${u.prev_reading ?? "-"}</td>
-          <td>${formatDate(u.prev_reading_date)}</td>
-          <td>${u.last_reading ?? "-"}</td>
-          <td>${formatDate(u.last_reading_date)}</td>
-          <td>${consumption}</td>
-          <td>${formatDate(u.paid_date)}</td>
-          <td>${u.paid_kwh ?? "-"}</td>
-        `;
-        tbody.appendChild(row);
-      });
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td class="text-center">
+              <a href="/edit.html?id=${u.id}" title="Редактировать">✏️</a>
+            </td>
+            <td>${u.plot_number ?? "-"}</td>
+            <td>${u.full_name ?? "-"}</td>
+            <td>${u.phone || "-"}</td>
+            <td>${u.prev_reading ?? "-"}</td>
+            <td>${formatDate(u.prev_reading_date)}</td>
+            <td>${u.last_reading ?? "-"}</td>
+            <td>${formatDate(u.last_reading_date)}</td>
+            <td>${consumption}</td>
+            <td>${formatDate(u.paid_date)}</td>
+            <td>${u.paid_kwh ?? "-"}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Ошибка загрузки данных пользователей:", err);
+      }
     }
 
+    // Инициализация
     loadNavbar();
     loadUsers();
   </script>
