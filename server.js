@@ -206,6 +206,51 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// Дополнение серверного файла для поддержки добавления оплат с вычислением задолженности
+
+app.post("/api/payments", authMiddleware, async (req, res) => {
+  const { user_id, payment_date, paid_reading } = req.body;
+
+  if (!user_id || !payment_date || paid_reading == null) {
+    return res.status(400).json({ message: "Не все поля заполнены" });
+  }
+
+  try {
+    // Получаем последнее показание
+    const [[lastReading]] = await db.query(
+      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
+      [user_id]
+    );
+
+    if (!lastReading) {
+      return res.status(400).json({ message: "Нет показаний для пользователя" });
+    }
+
+    const unpaid_kwh = lastReading.value - paid_reading;
+
+    // Получаем актуальный тариф
+    const [[tariffRow]] = await db.query(
+      `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
+    );
+    const tariff = tariffRow?.value || 4.75;
+
+    const debt = unpaid_kwh * tariff;
+
+    await db.query(
+      `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt)
+       VALUES (?, ?, ?, ?, ?)`,
+      [user_id, payment_date, paid_reading, unpaid_kwh, debt]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка при добавлении оплаты", details: err.message });
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`\u2705 Server is running on port ${PORT}`);
 });
+
+

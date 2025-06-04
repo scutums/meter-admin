@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Быстрый ввод оплат</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script>
+    const token = localStorage.getItem("token");
+    if (!token) window.location.href = "/login.html";
+  </script>
+</head>
+<body class="bg-light">
+  <div id="navbar-placeholder"></div>
+  <div class="container py-4">
+    <h2 class="mb-4">💰 Быстрый ввод оплат</h2>
+
+    <div class="mb-3">
+      <label for="payment-date" class="form-label">Дата оплаты</label>
+      <input type="date" id="payment-date" class="form-control" value="2025-06-04" />
+    </div>
+
+    <form id="bulk-payments-form">
+      <table class="table table-bordered table-hover">
+        <thead class="table-primary text-center align-middle">
+          <tr>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Послед. показание</th>
+            <th>Оплачено до</th>
+            <th>Израсходовано</th>
+            <th>К оплате</th>
+            <th>Ввод (кВт⋅ч)</th>
+          </tr>
+        </thead>
+        <tbody id="payments-body"></tbody>
+      </table>
+      <button type="submit" class="btn btn-success mt-3">💾 Сохранить всё</button>
+    </form>
+  </div>
+
+  <script>
+    const TARIFF = 4.75;
+
+    async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      document.getElementById("username").textContent = "👤 " + payload.login;
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("token");
+        location.href = "/login.html";
+      });
+    }
+
+    function formatDate(str) {
+      if (!str) return "-";
+      const d = new Date(str);
+      return `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1).toString().padStart(2, "0")}.${d.getFullYear()}`;
+    }
+
+    async function loadUsers() {
+      const res = await fetch("/api/users", { headers: { Authorization: "Bearer " + token } });
+      const users = await res.json();
+      const tbody = document.getElementById("payments-body");
+      tbody.innerHTML = "";
+
+      users.forEach(u => {
+        const spent = u.last_reading != null && u.paid_reading != null
+          ? u.last_reading - u.paid_reading
+          : "-";
+        const debt = typeof spent === "number" ? (spent * TARIFF).toFixed(2) : "-";
+
+        const row = document.createElement("tr");
+        row.dataset.userId = u.id;
+        row.innerHTML = `
+          <td>${u.plot_number}</td>
+          <td>${u.full_name}</td>
+          <td class="text-center">${u.last_reading ?? "-"}</td>
+          <td class="text-center">${formatDate(u.payment_date)}</td>
+          <td class="text-center">${spent}</td>
+          <td class="text-center">${debt}</td>
+          <td><input type="number" class="form-control paid-input" placeholder="кВт⋅ч" min="0" /></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    document.getElementById("bulk-payments-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const rows = document.querySelectorAll("#payments-body tr");
+      const payment_date = document.getElementById("payment-date").value;
+
+      for (const row of rows) {
+        const user_id = row.dataset.userId;
+        const input = row.querySelector(".paid-input");
+        const paid = input.value;
+        if (!paid) continue;
+
+        const res = await fetch("/api/payments", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({ user_id, payment_date, paid_kwh: paid }),
+        });
+
+        if (res.ok) {
+          row.classList.add("table-success");
+        } else {
+          row.classList.add("table-danger");
+        }
+      }
+    });
+
+    loadNavbar();
+    loadUsers();
+    document.getElementById("payment-date").value = new Date().toISOString().slice(0, 10);
+  </script>
+</body>
+</html>
