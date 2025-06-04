@@ -48,6 +48,26 @@
   </div>
 
   <script>
+
+ async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+
+      try {
+        const token = localStorage.getItem("token");
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        document.getElementById("username").textContent = "👤 " + payload.login;
+      } catch {
+        document.getElementById("username").textContent = "👤 Пользователь";
+      }
+
+      document.getElementById("logoutBtn")?.addEventListener("click", () => {
+        localStorage.removeItem("token");
+        window.location.href = "/login.html";
+      });
+    }
+
     document.getElementById('user-name').textContent = localStorage.getItem('userLogin') || 'Пользователь';
 
     function logout() {
