@@ -1,273 +1,161 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Быстрый ввод оплат</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-
-    header {
-      background-color: #007bff;
-      color: white;
-      padding: 10px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .table td, .table th {
+      vertical-align: middle;
     }
-
-    header h1 {
-      margin: 0;
-      font-size: 20px;
-    }
-
-    .user-info {
-      font-size: 14px;
-    }
-
-    nav {
-      background-color: #0056b3;
-      padding: 10px 20px;
-      display: flex;
-      gap: 20px;
-    }
-
-    nav a {
-      color: white;
-      text-decoration: none;
+    .unpaid-kwh, .debt {
       font-weight: bold;
+      text-align: center;
     }
-
-    nav a:hover {
-      text-decoration: underline;
-    }
-
-    main {
-      padding: 20px;
-    }
-
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-bottom: 20px;
-    }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-
-    th {
-      background-color: #f4f4f4;
-    }
-
-    input[type="number"], input[type="date"], select {
-      width: 100%;
-      padding: 6px;
-    }
-
-    button {
-      padding: 6px 12px;
-      margin-top: 10px;
-      cursor: pointer;
-    }
-
-    @media (max-width: 768px) {
-      table, thead, tbody, th, td, tr {
-        display: block;
-      }
-      tr {
-        margin-bottom: 20px;
-      }
-      th {
-        display: none;
-      }
-      td {
-        border: none;
-        position: relative;
-        padding-left: 50%;
-      }
-      td::before {
-        position: absolute;
-        left: 10px;
-        width: 45%;
-        white-space: nowrap;
-        font-weight: bold;
-      }
-      td:nth-child(1)::before { content: "Номер участка"; }
-      td:nth-child(2)::before { content: "ФИО"; }
-      td:nth-child(3)::before { content: "Последние показания"; }
-      td:nth-child(4)::before { content: "Дата последних показаний"; }
-      td:nth-child(5)::before { content: "Последняя дата оплаты"; }
-      td:nth-child(6)::before { content: "Последние оплаченные показания"; }
-      td:nth-child(7)::before { content: "Расход после оплаты"; }
-      td:nth-child(8)::before { content: "Сумма к оплате"; }
-      td:nth-child(9)::before { content: "Оплаченные кВт⋅ч"; }
-      td:nth-child(10)::before { content: "Дата оплаты"; }
-      td:nth-child(11)::before { content: "Тариф"; }
-      td:nth-child(12)::before { content: "Действия"; }
+    .navbar-brand {
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Учёт електроэнергии</h1>
-    <div class="user-info">
-      <span id="user-name">Пользователь</span> |
-      <a href="#" onclick="logout()" style="color:white; text-decoration: underline;">Выйти</a>
+   <div id="navbar-placeholder"></div>
+
+  <div class="container">
+    <h2 class="mb-3">Быстрый ввод оплат</h2>
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover" id="payments-table">
+        <thead class="table-light">
+          <tr>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Последние показания</th>
+            <th>Дата показаний</th>
+            <th>Дата оплаты</th>
+            <th>Оплачено (кВт)</th>
+            <th>Расход</th>
+            <th>Тариф</th>
+            <th>Сумма</th>
+            <th>Новая дата</th>
+            <th>Действие</th>
+          </tr>
+        </thead>
+        <tbody id="payments-body">
+          <!-- строки -->
+        </tbody>
+      </table>
     </div>
-  </header>
-
-  <nav>
-    <a href="index.html">Главная</a>
-    <a href="quick-entry.html">Быстрый ввод показаний</a>
-    <a href="quick-payments.html">Быстрый ввод оплат</a>
-  </nav>
-
-  <main>
-    <table id="payments-table">
-      <thead>
-        <tr>
-          <th>Номер участка</th>
-          <th>ФИО</th>
-          <th>Последние показания</th>
-          <th>Дата последних показаний</th>
-          <th>Последняя дата оплаты</th>
-          <th>Последние оплаченные показания</th>
-          <th>Расход после оплаты</th>
-          <th>Сумма к оплате</th>
-          <th>Оплаченные кВт⋅ч</th>
-          <th>Дата оплаты</th>
-          <th>Тариф</th>
-          <th>Действия</th>
-        </tr>
-      </thead>
-      <tbody id="payments-body">
-        <!-- Данные будут загружены с сервера -->
-      </tbody>
-    </table>
-    <button id="save-all">💾 Сохранить всё</button>
-  </main>
+    <button class="btn btn-success mt-3" id="save-all">💾 Сохранить всё</button>
+  </div>
 
   <script>
-    function logout() {
-      localStorage.removeItem('token');
-      window.location.href = "login.html";
-    }
-
     document.getElementById('user-name').textContent = localStorage.getItem('userLogin') || 'Пользователь';
 
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
     async function fetchUsers() {
-      const response = await fetch('/api/users', {
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      const res = await fetch('/api/users', {
+        headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
       });
-      return await response.json();
+      return await res.json();
     }
 
     async function fetchTariffs() {
-      const response = await fetch('/api/tariffs', {
-        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      const res = await fetch('/api/tariffs', {
+        headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
       });
-      return await response.json();
+      return await res.json();
     }
 
-    function calculateDebt(unpaid_kwh, tariff) {
-      return (unpaid_kwh * tariff).toFixed(2);
+    function calculateDebt(unpaid, tariff) {
+      return (unpaid * tariff).toFixed(2);
     }
 
     function createRow(user, tariffs) {
       const tr = document.createElement('tr');
-
-      const lastReading = user.last_reading || 0;
-      const paidReading = user.paid_reading || 0;
-      const unpaidKwh = lastReading - paidReading;
-      const defaultTariff = tariffs[0]?.value || 4.75;
-      const debt = calculateDebt(unpaidKwh, defaultTariff);
+      const last = user.last_reading || 0;
+      const paid = user.paid_reading || 0;
+      const unpaid = last - paid;
+      const tariff = tariffs[0]?.value || 4.75;
 
       tr.innerHTML = `
         <td>${user.plot_number}</td>
         <td>${user.full_name}</td>
-        <td>${lastReading}</td>
+        <td class="text-center">${last}</td>
         <td>${user.last_reading_date || ''}</td>
         <td>${user.payment_date || ''}</td>
-        <td>${paidReading}</td>
-        <td class="unpaid-kwh">${unpaidKwh}</td>
-        <td class="debt">${debt}</td>
-        <td><input type="number" class="paid-reading" value="${paidReading}" min="0" /></td>
-        <td><input type="date" class="payment-date" value="${new Date().toISOString().split('T')[0]}" /></td>
+        <td><input type="number" class="form-control paid-reading" value="${paid}" min="0"></td>
+        <td class="unpaid-kwh text-center">${unpaid}</td>
         <td>
-          <select class="tariff-select">
-            ${tariffs.map(tariff => `
-              <option value="${tariff.value}" ${tariff.value === defaultTariff ? 'selected' : ''}>
-                ${tariff.value} грн (с ${tariff.effective_date})
-              </option>
-            `).join('')}
+          <select class="form-select tariff-select">
+            ${tariffs.map(t => `<option value="${t.value}" ${t.value === tariff ? 'selected' : ''}>
+              ${t.value} грн (с ${t.effective_date})
+            </option>`).join('')}
           </select>
         </td>
-        <td><button class="pay-button">💰 Оплачено</button></td>
+        <td class="debt text-center">${calculateDebt(unpaid, tariff)}</td>
+        <td><input type="date" class="form-control payment-date" value="${new Date().toISOString().split('T')[0]}"></td>
+        <td><button class="btn btn-primary pay-button">💰</button></td>
       `;
 
-      const paidReadingInput = tr.querySelector('.paid-reading');
+      const paidInput = tr.querySelector('.paid-reading');
       const tariffSelect = tr.querySelector('.tariff-select');
-      const unpaidKwhCell = tr.querySelector('.unpaid-kwh');
+      const unpaidCell = tr.querySelector('.unpaid-kwh');
       const debtCell = tr.querySelector('.debt');
 
-      function updateCalculations() {
-        const newPaidReading = parseFloat(paidReadingInput.value) || 0;
-        const newUnpaidKwh = lastReading - newPaidReading;
-        const selectedTariff = parseFloat(tariffSelect.value);
-        unpaidKwhCell.textContent = newUnpaidKwh;
-        debtCell.textContent = calculateDebt(newUnpaidKwh, selectedTariff);
+      function updateCalc() {
+        const newPaid = parseFloat(paidInput.value) || 0;
+        const newUnpaid = last - newPaid;
+        const newTariff = parseFloat(tariffSelect.value);
+        unpaidCell.textContent = newUnpaid;
+        debtCell.textContent = calculateDebt(newUnpaid, newTariff);
       }
 
-      paidReadingInput.addEventListener('input', updateCalculations);
-      tariffSelect.addEventListener('change', updateCalculations);
+      paidInput.addEventListener('input', updateCalc);
+      tariffSelect.addEventListener('change', updateCalc);
 
       tr.querySelector('.pay-button').addEventListener('click', async () => {
-        const paymentDate = tr.querySelector('.payment-date').value;
-        const paidReading = parseFloat(paidReadingInput.value) || 0;
+        const reading = parseFloat(paidInput.value) || 0;
+        const date = tr.querySelector('.payment-date').value;
 
-        const response = await fetch('/api/payments', {
+        const resp = await fetch('/api/payments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + localStorage.getItem('token')
+            Authorization: 'Bearer ' + localStorage.getItem('token')
           },
           body: JSON.stringify({
             user_id: user.id,
-            payment_date: paymentDate,
-            paid_reading: paidReading
+            payment_date: date,
+            paid_reading: reading
           })
         });
 
-        if (response.ok) {
-          alert('Оплата успешно сохранена');
-        } else {
-          const error = await response.json();
-          alert('Ошибка при сохранении оплаты: ' + error.message);
+        if (resp.ok) alert('✅ Оплата сохранена');
+        else {
+          const err = await resp.json();
+          alert('❌ Ошибка: ' + err.message);
         }
       });
 
       return tr;
     }
 
-    document.getElementById('save-all').addEventListener('click', async () => {
-      const rows = document.querySelectorAll('#payments-body tr');
-      for (const tr of rows) {
-        tr.querySelector('.pay-button').click();
-      }
+    document.getElementById('save-all').addEventListener('click', () => {
+      document.querySelectorAll('.pay-button').forEach(btn => btn.click());
     });
 
     async function init() {
       const [users, tariffs] = await Promise.all([fetchUsers(), fetchTariffs()]);
       const tbody = document.getElementById('payments-body');
-      users.forEach(user => {
-        const row = createRow(user, tariffs);
-        tbody.appendChild(row);
-      });
+      users.forEach(user => tbody.appendChild(createRow(user, tariffs)));
     }
 
     init();
   </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
