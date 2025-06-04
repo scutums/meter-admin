@@ -66,15 +66,26 @@
   .then((res) => res.json())
   .then((data) => {
     const tbody = document.querySelector("#users-table tbody");
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  const date = new Date(dateStr);
+  if (isNaN(date)) return "-";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
     data.forEach((user) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${user.plot_number}</td>
         <td>${user.full_name}</td>
         <td>${user.prev_reading ?? '-'}</td>
-        <td>${user.prev_date ?? '-'}</td>
+        <td>${formatDate(user.prev_date ?? '-')}</td>
         <td>${user.last_reading ?? '-'}</td>
-        <td>${user.reading_date ?? '-'}</td>
+        <td>${formatDate(user.reading_date ?? '-')}</td>
         <td>
           <a href="/add_reading.html?user_id=${user.id}" class="btn btn-sm btn-success">Внести</a>
           <a href="/edit_user.html?id=${user.id}" class="btn btn-sm btn-secondary">Редактировать</a>
