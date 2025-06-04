@@ -13,86 +13,95 @@
   </script>
 </head>
 <body class="bg-light">
-<div id="navbar-placeholder"></div>
-<script>
-  async function loadNavbar() {
-    const res = await fetch("/partials/nav.html");
-    const html = await res.text();
-    document.getElementById("navbar-placeholder").innerHTML = html;
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/login.html";
-    } else {
+  <div id="navbar-placeholder"></div>
+
+  <div class="container py-4">
+    <h2 class="mb-4">📋 Участки и показания</h2>
+
+    <table class="table table-bordered table-striped table-hover">
+      <thead class="table-primary text-center align-middle">
+        <tr>
+          <th></th>
+          <th>Участок</th>
+          <th>ФИО</th>
+          <th>Телефон</th>
+          <th>Пред. показание</th>
+          <th>Дата</th>
+          <th>Послед. показание</th>
+          <th>Дата</th>
+          <th>Расход</th>
+          <th>Дата оплаты</th>
+          <th>Оплачено (кВт⋅ч)</th>
+        </tr>
+      </thead>
+      <tbody id="users-table-body"></tbody>
+    </table>
+  </div>
+
+  <script>
+    async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+
       try {
+        const token = localStorage.getItem("token");
         const payload = JSON.parse(atob(token.split('.')[1]));
         document.getElementById("username").textContent = "👤 " + payload.login;
       } catch {
         document.getElementById("username").textContent = "👤 Пользователь";
       }
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("token");
+        window.location.href = "/login.html";
+      });
     }
-    document.getElementById("logoutBtn").addEventListener("click", () => {
-      localStorage.removeItem("token");
-      window.location.href = "/login.html";
-    });
-  }
-  loadNavbar();
-</script>
 
-<div class="container py-4">
-  <h1 class="mb-4">⚡️ Учёт электроэнергии</h1>
+    function formatDate(dateStr) {
+      if (!dateStr) return "-";
+      const date = new Date(dateStr);
+      if (isNaN(date)) return "-";
+      return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+    }
 
-  <table id="users-table" class="table table-bordered table-hover table-striped">
-    <thead class="table-primary">
-      <tr>
-        <th>Участок</th>
-        <th>ФИО</th>
-        <th>Предыдущее показание</th>
-        <th>Дата предыдущего</th>
-        <th>Последнее показание</th>
-        <th>Дата последнего</th>
-        <th>Действия</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+    async function loadUsers() {
+      const res = await fetch("/api/users", {
+        headers: { Authorization: "Bearer " + localStorage.getItem("token") },
+      });
+      const users = await res.json();
+      const tbody = document.getElementById("users-table-body");
+      tbody.innerHTML = "";
 
-<script>
-  fetch("/api/users", {
-    headers: {
-      Authorization: "Bearer " + localStorage.getItem("token"),
-    },
-  })
-  .then((res) => res.json())
-  .then((data) => {
-    const tbody = document.querySelector("#users-table tbody");
+      users.forEach((u) => {
+        const row = document.createElement("tr");
 
-function formatDate(dateStr) {
-  if (!dateStr) return "-";
-  const date = new Date(dateStr);
-  if (isNaN(date)) return "-";
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}.${month}.${year}`;
-}
+        const consumption =
+          u.last_reading != null && u.prev_reading != null
+            ? u.last_reading - u.prev_reading
+            : "-";
 
-    data.forEach((user) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${user.plot_number}</td>
-        <td>${user.full_name}</td>
-        <td>${user.prev_reading ?? '-'}</td>
-        <td>${formatDate(user.prev_date ?? '-')}</td>
-        <td>${user.last_reading ?? '-'}</td>
-        <td>${formatDate(user.reading_date ?? '-')}</td>
-        <td>
-          <a href="/add_reading.html?user_id=${user.id}" class="btn btn-sm btn-success">Внести</a>
-          <a href="/edit_user.html?id=${user.id}" class="btn btn-sm btn-secondary">Редактировать</a>
-        </td>`;
-      tbody.appendChild(tr);
-    });
-  });
-</script>
+        row.innerHTML = `
+          <td class="text-center">
+            <a href="/edit.html?id=${u.id}" title="Редактировать">✏️</a>
+          </td>
+          <td>${u.plot_number}</td>
+          <td>${u.full_name}</td>
+          <td>${u.phone || "-"}</td>
+          <td>${u.prev_reading ?? "-"}</td>
+          <td>${formatDate(u.prev_reading_date)}</td>
+          <td>${u.last_reading ?? "-"}</td>
+          <td>${formatDate(u.last_reading_date)}</td>
+          <td>${consumption}</td>
+          <td>${formatDate(u.paid_date)}</td>
+          <td>${u.paid_kwh ?? "-"}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    loadNavbar();
+    loadUsers();
+  </script>
 </body>
 </html>

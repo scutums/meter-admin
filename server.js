@@ -65,33 +65,63 @@ app.get("/", (req, res) => {
 app.get("/api/users", authMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT u.id, u.plot_number, u.full_name, u.phone,
-             r.reading_date, r.value AS last_reading,
-             (
-               SELECT r2.value FROM readings r2
-               WHERE r2.user_id = u.id AND r2.reading_date < r.reading_date
-               ORDER BY r2.reading_date DESC LIMIT 1
-             ) AS prev_reading,
-             (
-               SELECT r2.reading_date FROM readings r2
-               WHERE r2.user_id = u.id AND r2.reading_date < r.reading_date
-               ORDER BY r2.reading_date DESC LIMIT 1
-             ) AS prev_date
+      SELECT 
+        u.id,
+        u.plot_number,
+        u.full_name,
+        u.phone,
+
+        r_last.reading_date AS last_reading_date,
+        r_last.value AS last_reading,
+
+        r_prev.reading_date AS prev_reading_date,
+        r_prev.value AS prev_reading,
+
+        p.paid_date,
+        p.paid_kwh
+
       FROM users u
+
       LEFT JOIN (
-        SELECT r1.* FROM readings r1
+        SELECT r1.*
+        FROM readings r1
         INNER JOIN (
           SELECT user_id, MAX(reading_date) AS max_date
-          FROM readings GROUP BY user_id
+          FROM readings
+          GROUP BY user_id
         ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
-      ) r ON u.id = r.user_id
+      ) r_last ON u.id = r_last.user_id
+
+      LEFT JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS prev_date
+          FROM readings
+          WHERE (user_id, reading_date) NOT IN (
+            SELECT user_id, MAX(reading_date)
+            FROM readings
+            GROUP BY user_id
+          )
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
+      ) r_prev ON u.id = r_prev.user_id
+
+      LEFT JOIN (
+        SELECT user_id, MAX(paid_date) AS paid_date, paid_kwh
+        FROM payments
+        GROUP BY user_id
+      ) p ON u.id = p.user_id
+
       ORDER BY u.plot_number
     `);
+
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: "Database error", details: err.message });
   }
 });
+
 
 app.post("/api/readings", authMiddleware, async (req, res) => {
   const { user_id, reading_date, value } = req.body;
