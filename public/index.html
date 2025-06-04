@@ -17,56 +17,35 @@
   </script>
 </head>
 <body class="bg-light">
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary w-100">
-  <div class="container-fluid">
-    <a class="navbar-brand fw-bold text-white" href="/index.html">
-      ⚡ Учёт электроэнергии
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav me-auto">
-        <li class="nav-item">
-          <a class="nav-link text-white" href="/index.html">Показания</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link text-white" href="/update.html">Редактирование</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link text-white" href="/another.html">Другая вкладка</a>
-        </li>
-      </ul>
-      <div class="d-flex align-items-center">
-        <span class="text-white me-3" id="username">👤 Пользователь</span>
-        <button class="btn btn-outline-light btn-sm" id="logoutBtn">Выйти</button>
-      </div>
-    </div>
-  </div>
-</nav>
+ <div id="navbar-placeholder"></div>
+
 <script>
-  function getUsernameFromToken(token) {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.login || "Пользователь";
-    } catch {
-      return "Пользователь";
+  async function loadNavbar() {
+    const res = await fetch("/partials/nav.html");
+    const html = await res.text();
+    document.getElementById("navbar-placeholder").innerHTML = html;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "/login.html";
+    } else {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        document.getElementById("username").textContent = "👤 " + payload.login;
+      } catch {
+        document.getElementById("username").textContent = "👤 Пользователь";
+      }
     }
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("token");
+      window.location.href = "/login.html";
+    });
   }
 
-  const token = localStorage.getItem("token");
-  if (!token) {
-    window.location.href = "/login.html";
-  } else {
-    const username = getUsernameFromToken(token);
-    document.getElementById("username").textContent = `👤 ${username}`;
-  }
-
-  document.getElementById("logoutBtn").addEventListener("click", () => {
-    localStorage.removeItem("token");
-    window.location.href = "/login.html";
-  });
+  loadNavbar();
 </script>
+
 
   <div class="container py-4">
     <h1 class="mb-4">📊 Показания счетчиков</h1>
