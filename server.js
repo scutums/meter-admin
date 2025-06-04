@@ -153,7 +153,8 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
     const unpaid_kwh = lastReading.value - paid_reading;
 
     const [[tariffRow]] = await db.query(
-      `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
+      `SELECT value FROM tariff WHERE effective_date <= ? ORDER BY effective_date DESC LIMIT 1`,
+      [payment_date]
     );
     const tariff = tariffRow?.value || 4.75;
     const debt = unpaid_kwh * tariff;

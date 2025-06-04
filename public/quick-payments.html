@@ -1,122 +1,169 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ввод оплаты</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script>
-    const token = localStorage.getItem("token");
-    if (!token) location.href = "/login.html";
-  </script>
+  <meta charset="UTF-8" />
+  <title>Быстрый ввод оплат</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+    input[type="number"], input[type="date"], select { width: 100%; padding: 6px; }
+    button { padding: 6px 12px; margin-top: 10px; }
+  </style>
 </head>
-<body class="bg-light">
-  <div id="navbar-placeholder"></div>
-  <div class="container py-4">
-    <h2 class="mb-4">⛀ Быстрый ввод оплат</h2>
-
-    <div class="mb-3">
-      <label for="common-date" class="form-label">Дата оплаты</label>
-      <input type="date" id="common-date" class="form-control" value="2025-06-04">
-    </div>
-
-    <form id="payment-form">
-      <table class="table table-bordered table-hover align-middle">
-        <thead class="table-primary text-center">
-          <tr>
-            <th>Участок</th>
-            <th>ФИО</th>
-            <th>Посл. показание<br><small>и дата</small></th>
-            <th>Оплачено до<br><small>и дата</small></th>
-            <th>Расход</th>
-            <th>К оплате</th>
-            <th>Оплачено кВт⋅ч</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="payment-table-body"></tbody>
-      </table>
-      <button type="submit" class="btn btn-success">💾 Сохранить всё</button>
-    </form>
-  </div>
+<body>
+  <h1>Быстрый ввод оплат</h1>
+  <table id="payments-table">
+    <thead>
+      <tr>
+        <th>Номер участка</th>
+        <th>ФИО</th>
+        <th>Последние показания</th>
+        <th>Дата последних показаний</th>
+        <th>Последняя дата оплаты</th>
+        <th>Последние оплаченные показания</th>
+        <th>Расход после оплаты</th>
+        <th>Сумма к оплате</th>
+        <th>Оплаченные кВт⋅ч</th>
+        <th>Дата оплаты</th>
+        <th>Тариф</th>
+        <th>Действия</th>
+      </tr>
+    </thead>
+    <tbody id="payments-body">
+      <!-- Данные будут загружены с сервера -->
+    </tbody>
+  </table>
+  <button id="save-all">💾 Сохранить всё</button>
 
   <script>
-    function formatDate(d) {
-      if (!d) return "-";
-      const date = new Date(d);
-      return `${date.getDate().toString().padStart(2,"0")}.${(date.getMonth()+1).toString().padStart(2,"0")}.${date.getFullYear()}`;
+    async function fetchUsers() {
+      const response = await fetch('/api/users', {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+      });
+      const users = await response.json();
+      return users;
     }
 
-    async function loadData() {
-      const res = await fetch("/api/users", {
-        headers: { Authorization: "Bearer " + token },
+    async function fetchTariffs() {
+      const response = await fetch('/api/tariffs', {
+        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
       });
-      const users = await res.json();
-      const tbody = document.getElementById("payment-table-body");
-      const payDate = document.getElementById("common-date").value;
-      tbody.innerHTML = "";
+      const tariffs = await response.json();
+      return tariffs;
+    }
 
-      users.forEach((u) => {
-        const diff = (u.last_reading ?? 0) - (u.paid_reading ?? 0);
-        const debt = diff > 0 ? (diff * 4.75).toFixed(2) : "-";
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${u.plot_number}</td>
-          <td>${u.full_name}</td>
-          <td class="text-center">${u.last_reading ?? "-"}<br><small>${formatDate(u.last_reading_date)}</small></td>
-          <td class="text-center">${u.paid_reading ?? "-"}<br><small>${formatDate(u.payment_date)}</small></td>
-          <td class="text-center">${diff > 0 ? diff : "-"}</td>
-          <td class="text-center">${debt}</td>
-          <td><input type="number" class="form-control paid-kwh" min="0" data-user="${u.id}" placeholder="кВт⋅ч"></td>
-          <td><button type="button" class="btn btn-outline-primary btn-quick">💰 Оплачено</button></td>
-        `;
-        tbody.appendChild(tr);
+    function createTariffOptions(tariffs) {
+      return tariffs.map(tariff => {
+        const option = document.createElement('option');
+        option.value = tariff.value;
+        option.textContent = `${tariff.value} грн (с ${tariff.effective_date})`;
+        return option;
       });
     }
 
-    document.getElementById("payment-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const date = document.getElementById("common-date").value;
-      const rows = document.querySelectorAll(".paid-kwh");
+    function calculateDebt(unpaid_kwh, tariff) {
+      return (unpaid_kwh * tariff).toFixed(2);
+    }
 
-      for (const input of rows) {
-        const value = input.value;
-        if (!value) continue;
-        const user_id = input.dataset.user;
-        const row = input.closest("tr");
-        const paid_reading = row.cells[2].textContent.split("\n")[0].trim();
-        const unpaid_kwh = row.cells[4].textContent;
-        const debt = row.cells[5].textContent;
+    function createRow(user, tariffs) {
+      const tr = document.createElement('tr');
 
-        await fetch("/api/payments", {
-          method: "POST",
+      const lastReading = user.last_reading || 0;
+      const paidReading = user.paid_reading || 0;
+      const unpaidKwh = lastReading - paidReading;
+      const defaultTariff = tariffs[0]?.value || 4.75;
+      const debt = calculateDebt(unpaidKwh, defaultTariff);
+
+      tr.innerHTML = `
+        <td>${user.plot_number}</td>
+        <td>${user.full_name}</td>
+        <td>${lastReading}</td>
+        <td>${user.last_reading_date || ''}</td>
+        <td>${user.payment_date || ''}</td>
+        <td>${paidReading}</td>
+        <td class="unpaid-kwh">${unpaidKwh}</td>
+        <td class="debt">${debt}</td>
+        <td><input type="number" class="paid-reading" value="${paidReading}" min="0" /></td>
+        <td><input type="date" class="payment-date" value="${new Date().toISOString().split('T')[0]}" /></td>
+        <td>
+          <select class="tariff-select">
+            ${tariffs.map(tariff => `
+              <option value="${tariff.value}" ${tariff.value === defaultTariff ? 'selected' : ''}>
+                ${tariff.value} грн (с ${tariff.effective_date})
+              </option>
+            `).join('')}
+          </select>
+        </td>
+        <td><button class="pay-button">💰 Оплачено</button></td>
+      `;
+
+      // Добавляем обработчики событий
+      const paidReadingInput = tr.querySelector('.paid-reading');
+      const tariffSelect = tr.querySelector('.tariff-select');
+      const unpaidKwhCell = tr.querySelector('.unpaid-kwh');
+      const debtCell = tr.querySelector('.debt');
+
+      function updateCalculations() {
+        const newPaidReading = parseFloat(paidReadingInput.value) || 0;
+        const newUnpaidKwh = lastReading - newPaidReading;
+        const selectedTariff = parseFloat(tariffSelect.value);
+        unpaidKwhCell.textContent = newUnpaidKwh;
+        debtCell.textContent = calculateDebt(newUnpaidKwh, selectedTariff);
+      }
+
+      paidReadingInput.addEventListener('input', updateCalculations);
+      tariffSelect.addEventListener('change', updateCalculations);
+
+      // Обработчик кнопки оплаты
+      const payButton = tr.querySelector('.pay-button');
+      payButton.addEventListener('click', async () => {
+        const paymentDate = tr.querySelector('.payment-date').value;
+        const paidReading = parseFloat(paidReadingInput.value) || 0;
+
+        const response = await fetch('/api/payments', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
           },
-          body: JSON.stringify({ user_id, payment_date: date, paid_reading, unpaid_kwh, debt }),
+          body: JSON.stringify({
+            user_id: user.id,
+            payment_date: paymentDate,
+            paid_reading: paidReading
+          })
         });
 
-        row.classList.add("table-success");
+        if (response.ok) {
+          alert('Оплата успешно сохранена');
+        } else {
+          const error = await response.json();
+          alert('Ошибка при сохранении оплаты: ' + error.message);
+        }
+      });
+
+      return tr;
+    }
+
+    document.getElementById('save-all').addEventListener('click', async () => {
+      const rows = document.querySelectorAll('#payments-body tr');
+      for (const tr of rows) {
+        const payButton = tr.querySelector('.pay-button');
+        payButton.click();
       }
     });
 
-    document.addEventListener("click", async (e) => {
-      if (!e.target.classList.contains("btn-quick")) return;
-      const row = e.target.closest("tr");
-      const input = row.querySelector(".paid-kwh");
-      input.value = row.cells[4].textContent;
-    });
+    async function init() {
+      const [users, tariffs] = await Promise.all([fetchUsers(), fetchTariffs()]);
+      const tbody = document.getElementById('payments-body');
+      users.forEach(user => {
+        const row = createRow(user, tariffs);
+        tbody.appendChild(row);
+      });
+    }
 
-    document.getElementById("common-date").addEventListener("change", loadData);
-
-    document.addEventListener("DOMContentLoaded", async () => {
-      const res = await fetch("/partials/nav.html");
-      document.getElementById("navbar-placeholder").innerHTML = await res.text();
-      document.getElementById("common-date").value = new Date().toISOString().slice(0,10);
-      loadData();
-    });
+    init();
   </script>
 </body>
 </html>
