@@ -77,8 +77,10 @@ app.get("/api/users", authMiddleware, async (req, res) => {
         r_prev.reading_date AS prev_reading_date,
         r_prev.value AS prev_reading,
 
-        p.paid_date,
-        p.paid_kwh
+        p.payment_date,
+        p.paid_reading,
+        p.unpaid_kwh,
+        p.debt
 
       FROM users u
 
@@ -108,9 +110,13 @@ app.get("/api/users", authMiddleware, async (req, res) => {
       ) r_prev ON u.id = r_prev.user_id
 
       LEFT JOIN (
-        SELECT user_id, MAX(paid_date) AS paid_date, paid_kwh
-        FROM payments
-        GROUP BY user_id
+        SELECT p1.*
+        FROM payments p1
+        INNER JOIN (
+          SELECT user_id, MAX(payment_date) AS max_payment
+          FROM payments
+          GROUP BY user_id
+        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_payment
       ) p ON u.id = p.user_id
 
       ORDER BY u.plot_number
@@ -121,7 +127,6 @@ app.get("/api/users", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Database error", details: err.message });
   }
 });
-
 
 app.post("/api/readings", authMiddleware, async (req, res) => {
   const { user_id, reading_date, value } = req.body;
