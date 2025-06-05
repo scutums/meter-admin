@@ -42,6 +42,24 @@
       const res = await fetch("/partials/nav.html");
       const html = await res.text();
       document.getElementById("navbar-placeholder").innerHTML = html;
+      try {
+        const token = localStorage.getItem("token");
+        const resUser = await fetch("/api/auth-user-info", {
+          headers: { Authorization: "Bearer " + token }
+        });
+        if (resUser.ok) {
+          const user = await resUser.json();
+          document.getElementById("username").textContent = "👤 " + (user.full_name || user.plot_number || "Пользователь");
+        } else {
+          document.getElementById("username").textContent = "👤 Пользователь";
+        }
+      } catch {
+        document.getElementById("username").textContent = "👤 Пользователь";
+      }
+      document.getElementById("logoutBtn")?.addEventListener("click", () => {
+        localStorage.removeItem("token");
+        window.location.href = "/login.html";
+      });
     }
 
     async function loadReport(dateFrom, dateTo) {

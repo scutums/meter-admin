@@ -17,6 +17,10 @@
         <label for="password" class="form-label">Пароль</label>
         <input type="password" class="form-control" id="password" required />
       </div>
+      <div class="mb-3">
+        <label for="captcha" class="form-label">Сколько будет 3 + 4?</label>
+        <input type="text" class="form-control" id="captcha" name="captcha" required>
+      </div>
       <button type="submit" class="btn btn-primary w-100">Войти</button>
     </form>
     <div id="message" class="mt-3 text-center text-danger"></div>
@@ -32,6 +36,7 @@
       const payload = {
         login: form.login.value,
         password: form.password.value,
+        captcha: form.captcha.value,
       };
 
       const res = await fetch("/api/login", {

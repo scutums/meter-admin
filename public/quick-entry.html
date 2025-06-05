@@ -81,8 +81,15 @@
       document.getElementById("navbar-placeholder").innerHTML = html;
       try {
         const token = localStorage.getItem("token");
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        document.getElementById("username").textContent = "👤 " + payload.login;
+        const resUser = await fetch("/api/auth-user-info", {
+          headers: { Authorization: "Bearer " + token }
+        });
+        if (resUser.ok) {
+          const user = await resUser.json();
+          document.getElementById("username").textContent = "👤 " + (user.full_name || user.plot_number || "Пользователь");
+        } else {
+          document.getElementById("username").textContent = "👤 Пользователь";
+        }
       } catch {
         document.getElementById("username").textContent = "👤 Пользователь";
       }

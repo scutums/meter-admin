@@ -304,9 +304,12 @@ app.put("/api/users/:id", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/login", async (req, res) => {
-  const { login, password } = req.body;
+  const { login, password, captcha } = req.body;
   if (!login || !password) {
     return res.status(400).json({ message: "Логин и пароль обязательны" });
+  }
+  if (captcha !== '7') {
+    return res.status(400).json({ message: "Неверная капча" });
   }
   try {
     const [users] = await db.query("SELECT * FROM users_auth WHERE login = ?", [login]);
@@ -503,6 +506,23 @@ app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: "Ошибка получения последних данных", details: err.message });
+  }
+});
+
+app.get("/api/auth-user-info", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Нет токена" });
+    }
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const login = decoded.login;
+    const [rows] = await db.query("SELECT full_name, plot_number, phone FROM users_auth WHERE login = ?", [login]);
+    if (!rows.length) return res.status(404).json({ message: "Пользователь не найден" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(401).json({ message: "Ошибка авторизации" });
   }
 });
 

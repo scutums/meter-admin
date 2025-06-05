@@ -25,7 +25,7 @@
   <div id="navbar-placeholder"></div>
 
   <div class="container mt-4">
-    <h2 class="mb-3">Быстрый ввод оплат</h2>
+    <h2 class="mb-3"><span title="Оплаты">💰</span> Быстрый ввод оплат</h2>
     <form class="row g-3 mb-3" id="period-form">
       <div class="col-md-3">
         <label for="period-month" class="form-label">Месяц</label>
@@ -66,8 +66,15 @@
 
       try {
         const token = localStorage.getItem("token");
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        document.getElementById("username").textContent = "👤 " + payload.login;
+        const resUser = await fetch("/api/auth-user-info", {
+          headers: { Authorization: "Bearer " + token }
+        });
+        if (resUser.ok) {
+          const user = await resUser.json();
+          document.getElementById("username").textContent = "👤 " + (user.full_name || user.plot_number || "Пользователь");
+        } else {
+          document.getElementById("username").textContent = "👤 Пользователь";
+        }
       } catch {
         document.getElementById("username").textContent = "👤 Пользователь";
       }
