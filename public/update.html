@@ -21,7 +21,8 @@
       </div>
       <div class="col-md-4">
         <label for="phone" class="form-label">Телефон</label>
-        <input type="text" id="phone" class="form-control" />
+        <input type="tel" id="phone" class="form-control" pattern="[0-9]{10,11}" placeholder="Например: 89991234567" />
+        <div class="form-text">Введите номер телефона в формате: 89991234567</div>
       </div>
       <div class="col-12">
         <button type="submit" class="btn btn-primary">Сохранить изменения</button>
@@ -33,53 +34,75 @@
   </div>
 
   <script>
+    // Проверка авторизации
     const token = localStorage.getItem("token");
     if (!token) window.location.href = "/login.html";
 
+    // Получение ID пользователя из URL
     const params = new URLSearchParams(window.location.search);
     const userId = params.get("id");
     const message = document.getElementById("message");
 
+    // Загрузка данных пользователя
     async function loadUser() {
-      const res = await fetch("/api/users/" + userId, {
-        headers: { Authorization: "Bearer " + token }
-      });
-      if (!res.ok) {
-        message.innerHTML = `<div class="alert alert-danger">Ошибка загрузки пользователя</div>`;
+      try {
+        const res = await fetch("/api/users/" + userId, {
+          headers: { Authorization: "Bearer " + token }
+        });
+        
+        if (!res.ok) {
+          throw new Error("Не удалось загрузить данные пользователя");
+        }
+
+        const u = await res.json();
+        document.getElementById("plot_number").value = u.plot_number;
+        document.getElementById("full_name").value = u.full_name;
+        document.getElementById("phone").value = u.phone || "";
+      } catch (error) {
+        message.innerHTML = `<div class="alert alert-danger">Ошибка: ${error.message}</div>`;
+      }
+    }
+
+    // Обработка отправки формы
+    document.getElementById("edit-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      // Проверка формата номера телефона
+      const phone = document.getElementById("phone").value;
+      if (phone && !/^[0-9]{10,11}$/.test(phone)) {
+        message.innerHTML = `<div class="alert alert-danger">Ошибка: Неверный формат номера телефона</div>`;
         return;
       }
 
-      const u = await res.json();
-      document.getElementById("plot_number").value = u.plot_number;
-      document.getElementById("full_name").value = u.full_name;
-      document.getElementById("phone").value = u.phone || "";
-    }
-
-    document.getElementById("edit-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
+      // Подготовка данных для отправки
       const payload = {
         plot_number: document.getElementById("plot_number").value,
         full_name: document.getElementById("full_name").value,
-        phone: document.getElementById("phone").value
+        phone: phone
       };
 
-      const res = await fetch("/api/users/" + userId, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token
-        },
-        body: JSON.stringify(payload)
-      });
+      try {
+        const res = await fetch("/api/users/" + userId, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token
+          },
+          body: JSON.stringify(payload)
+        });
 
-      if (res.ok) {
-        message.innerHTML = `<div class="alert alert-success">Изменения сохранены</div>`;
-      } else {
-        const err = await res.json();
-        message.innerHTML = `<div class="alert alert-danger">Ошибка: ${err.message || "Не удалось сохранить"}</div>`;
+        if (res.ok) {
+          message.innerHTML = `<div class="alert alert-success">Изменения успешно сохранены</div>`;
+        } else {
+          const err = await res.json();
+          throw new Error(err.message || "Не удалось сохранить изменения");
+        }
+      } catch (error) {
+        message.innerHTML = `<div class="alert alert-danger">Ошибка: ${error.message}</div>`;
       }
     });
 
+    // Загружаем данные при загрузке страницы
     loadUser();
   </script>
 </body>

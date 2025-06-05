@@ -15,6 +15,10 @@
     .navbar-brand {
       font-weight: bold;
     }
+    .row-overpaid { background-color: #cce5ff !important; }
+    .row-paid { background-color: #d4edda !important; }
+    .row-warning { background-color: #fff3cd !important; }
+    .row-danger { background-color: #f8d7da !important; }
   </style>
 </head>
 <body>
@@ -22,6 +26,15 @@
 
   <div class="container mt-4">
     <h2 class="mb-3">Быстрый ввод оплат</h2>
+    <form class="row g-3 mb-3" id="period-form">
+      <div class="col-md-3">
+        <label for="period-month" class="form-label">Месяц</label>
+        <input type="month" id="period-month" class="form-control" required />
+      </div>
+      <div class="col-md-3 align-self-end">
+        <button type="submit" class="btn btn-primary">Показать</button>
+      </div>
+    </form>
     <div class="table-responsive">
       <table class="table table-bordered table-hover" id="payments-table">
         <thead class="table-light">
@@ -65,10 +78,15 @@
       });
     }
 
-    async function fetchUsers() {
-      const res = await fetch('/api/users', {
+    async function fetchUserStats() {
+      const res = await fetch('/api/payments/last-stats', {
         headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Ошибка загрузки:', res.status, err);
+        return [];
+      }
       return await res.json();
     }
 
@@ -101,46 +119,82 @@
       const paid = user.paid_reading || 0;
       const unpaid = last - paid;
       const tariff = tariffs[0]?.value || 4.75;
-      const debt = calculateDebt(unpaid, tariff);
+      const overpaid = paid > last;
+      const diff = Math.abs(last - paid);
+      const debt = overpaid ? calculateDebt(-diff, tariff) : calculateDebt(unpaid, tariff);
+      const debtValue = Math.abs(parseFloat(debt.exact));
+      // Определяем цвет строки
+      let rowBg = '';
+      if (overpaid) {
+        rowBg = 'background-color: #cce5ff !important;'; // синий
+      } else if (debtValue === 0) {
+        rowBg = 'background-color: #d4edda !important;'; // зелёный
+      } else if (debtValue > 0 && debtValue <= 3000) {
+        rowBg = 'background-color: #fff3cd !important;'; // жёлтый
+      } else if (debtValue > 3000) {
+        rowBg = 'background-color: #f8d7da !important;'; // красный
+      }
+      tr.setAttribute('style', rowBg);
 
       tr.innerHTML = `
         <td>${user.plot_number}</td>
         <td>${user.full_name}</td>
         <td>${formatDate(user.last_reading_date)}</td>
-        <td class="text-center">${last}</td>
+        <td class="text-center" style="font-weight: normal;">${last}</td>
         <td>${formatDate(user.payment_date)}</td>
-        <td><input type="number" class="form-control paid-reading" value="${paid}" min="0"></td>
-        <td class="unpaid-kwh text-center">${unpaid}</td>
+        <td><input type="number" class="form-control paid-reading" value="${paid}" min="0" ${user.payment_id ? 'disabled' : ''}></td>
+        <td class="unpaid-kwh text-center" style="font-weight: normal;">${overpaid ? '+' : ''}${diff}</td>
         <td>
-          <select class="form-select tariff-select">
+          <select class="form-select tariff-select" style="font-size: 0.85em;">
             ${tariffs.map(t => `<option value="${t.value}" ${t.value === tariff ? 'selected' : ''}>
-              ${t.value} грн (с ${t.effective_date})
+              ${t.value} (${t.effective_date})
             </option>`).join('')}
           </select>
         </td>
         <td class="debt text-center">
-          <div style="font-size: 0.9em; color: #555;">${debt.exact} грн</div>
-          <div style="font-weight: bold;">${debt.rounded} грн</div>
+          <div style="font-size: 1.3em; font-weight: normal;">${Math.abs(debt.rounded)}</div>
+          <div style="font-size: 0.8em; color: #555; font-weight: normal;">${Math.abs(debt.exact)}</div>
         </td>
-        <td><input type="date" class="form-control payment-date" value="${new Date().toISOString().split('T')[0]}"></td>
-        <td><button class="btn btn-primary pay-button">Оплачено</button></td>
+        <td><input type="date" class="form-control payment-date" value="${new Date().toISOString().split('T')[0]}" ${user.payment_id ? 'disabled' : ''}></td>
+        <td style="white-space:nowrap;">
+          <div style="display: flex; gap: 0.5em; align-items: center;">
+            <button class="btn btn-primary pay-button" ${user.payment_id ? 'disabled' : ''}>Оплачено</button>
+            <span class="pay-status ms-2"></span>
+            ${user.payment_id ? `<button class="btn btn-danger btn-sm delete-payment" data-payment-id="${user.payment_id}" title="Удалить оплату">×</button>` : ''}
+          </div>
+        </td>
       `;
 
       const paidInput = tr.querySelector('.paid-reading');
       const tariffSelect = tr.querySelector('.tariff-select');
       const unpaidCell = tr.querySelector('.unpaid-kwh');
       const debtCell = tr.querySelector('.debt');
+      const payStatus = tr.querySelector('.pay-status');
 
       function updateCalc() {
         const newPaid = parseFloat(paidInput.value) || 0;
         const newUnpaid = last - newPaid;
         const newTariff = parseFloat(tariffSelect.value);
-        unpaidCell.textContent = newUnpaid;
-        const newDebt = calculateDebt(newUnpaid, newTariff);
+        const newOverpaid = newPaid > last;
+        const newDiff = Math.abs(last - newPaid);
+        unpaidCell.textContent = (newOverpaid ? '+' : '') + newDiff;
+        const newDebt = newOverpaid ? calculateDebt(-newDiff, newTariff) : calculateDebt(newUnpaid, newTariff);
         debtCell.innerHTML = `
-          <div style="font-size: 0.9em; color: #555;">${newDebt.exact} грн</div>
-          <div style="font-weight: bold;">${newDebt.rounded} грн</div>
+          <div style="font-size: 1.3em; font-weight: normal;">${Math.abs(newDebt.rounded)}</div>
+          <div style="font-size: 0.8em; color: #555; font-weight: normal;">${Math.abs(newDebt.exact)}</div>
         `;
+        let newRowBg = '';
+        const newDebtValue = Math.abs(parseFloat(newDebt.exact));
+        if (newOverpaid) {
+          newRowBg = 'background-color: #cce5ff !important;';
+        } else if (newDebtValue === 0) {
+          newRowBg = 'background-color: #d4edda !important;';
+        } else if (newDebtValue > 0 && newDebtValue <= 3000) {
+          newRowBg = 'background-color: #fff3cd !important;';
+        } else if (newDebtValue > 3000) {
+          newRowBg = 'background-color: #f8d7da !important;';
+        }
+        tr.setAttribute('style', newRowBg);
       }
 
       paidInput.addEventListener('input', updateCalc);
@@ -157,34 +211,72 @@
             Authorization: 'Bearer ' + localStorage.getItem('token')
           },
           body: JSON.stringify({
-            user_id: user.id,
+            user_id: user.id || user.user_id,
             payment_date: date,
             paid_reading: reading
           })
         });
 
-        if (resp.ok) alert('✅ Оплата сохранена');
-        else {
+        if (resp.ok) {
+          payStatus.textContent = '✔';
+          payStatus.className = 'pay-status ms-2 text-success';
+          // Обновить таблицу после оплаты
+          const month = document.getElementById('period-month')?.value;
+          if (typeof init === 'function') init(month);
+        } else {
           const err = await resp.json();
-          alert('❌ Ошибка: ' + err.message);
+          payStatus.textContent = 'Ошибка';
+          payStatus.className = 'pay-status ms-2 text-danger';
         }
       });
 
       return tr;
     }
 
-    document.getElementById('save-all').addEventListener('click', () => {
-      document.querySelectorAll('.pay-button').forEach(btn => btn.click());
-    });
-
-    async function init() {
+    async function init(month) {
       await loadNavbar();
-      const [users, tariffs] = await Promise.all([fetchUsers(), fetchTariffs()]);
+      const [users, tariffs] = await Promise.all([fetchUserStats(), fetchTariffs()]);
       const tbody = document.getElementById('payments-body');
-      users.forEach(user => tbody.appendChild(createRow(user, tariffs)));
+      tbody.innerHTML = "";
+      users.forEach(user => {
+        if (user.last_reading_date && user.last_reading_date.startsWith(month)) {
+          const tr = createRow(user, tariffs);
+          tbody.appendChild(tr);
+        }
+      });
     }
 
-    init();
+    // Удаление оплаты
+    document.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('delete-payment')) {
+        if (!confirm('Удалить оплату?')) return;
+        const paymentId = e.target.getAttribute('data-payment-id');
+        if (!paymentId) return;
+        const resp = await fetch(`/api/payments/${paymentId}`, {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
+        });
+        if (resp.ok) {
+          // Обновить таблицу после удаления оплаты
+          const month = document.getElementById('period-month')?.value;
+          if (typeof init === 'function') init(month);
+        } else {
+          alert('Ошибка при удалении оплаты');
+        }
+      }
+    });
+
+    function getCurrentMonth() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    }
+    document.getElementById("period-month").value = getCurrentMonth();
+    document.getElementById("period-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const month = document.getElementById("period-month").value;
+      init(month);
+    });
+    init(getCurrentMonth());
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

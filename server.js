@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import viberRoutes from "./viber-api.js";
 
 dotenv.config();
 
@@ -62,35 +63,102 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
+function getMonthRange(month) {
+  // month: 'YYYY-MM'
+  const [year, m] = month.split('-').map(Number);
+  const firstDay = `${year}-${String(m).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, m, 0); // 0-й день следующего месяца = последний день текущего
+  const lastDayStr = `${year}-${String(m).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+  return { from: firstDay, to: lastDayStr };
+}
+
 app.get("/api/users", authMiddleware, async (req, res) => {
   try {
-    const [rows] = await db.query(`
+    const { month } = req.query;
+    let rows;
+    const sqlPeriod = `
       SELECT 
         u.id,
         u.plot_number,
         u.full_name,
         u.phone,
-        r_last.reading_date AS last_reading_date,
+        r_last.id as reading_id,
         r_last.value AS last_reading,
-        r_prev.reading_date AS prev_reading_date,
+        r_last.reading_date AS last_reading_date,
         r_prev.value AS prev_reading,
-        p.payment_date,
-        p.paid_reading,
-        p.unpaid_kwh,
-        p.debt
+        r_prev.reading_date AS prev_reading_date,
+        (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
+        p.payment_date AS paid_date,
+        p.paid_reading AS paid_kwh,
+        p.id as payment_id
       FROM users u
-      LEFT JOIN (
-        SELECT * FROM readings r1
-        WHERE (r1.user_id, r1.reading_date) IN (
-          SELECT user_id, MAX(reading_date)
+      INNER JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS max_date
           FROM readings
+          WHERE reading_date BETWEEN ? AND ?
           GROUP BY user_id
-        )
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
       ) r_last ON u.id = r_last.user_id
       LEFT JOIN (
-        SELECT * FROM readings r1
-        WHERE (r1.user_id, r1.reading_date) IN (
-          SELECT user_id, MAX(reading_date)
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS prev_date
+          FROM readings
+          WHERE (user_id, reading_date) NOT IN (
+            SELECT user_id, MAX(reading_date)
+            FROM readings
+            WHERE reading_date BETWEEN ? AND ?
+            GROUP BY user_id
+          )
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
+      ) r_prev ON u.id = r_prev.user_id
+      LEFT JOIN (
+        SELECT p1.*
+        FROM payments p1
+        INNER JOIN (
+          SELECT user_id, MAX(payment_date) AS max_date
+          FROM payments
+          WHERE payment_date BETWEEN ? AND ?
+          GROUP BY user_id
+        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
+      ) p ON u.id = p.user_id
+      ORDER BY u.plot_number
+    `;
+    const sqlAll = `
+      SELECT 
+        u.id,
+        u.plot_number,
+        u.full_name,
+        u.phone,
+        r_last.id as reading_id,
+        r_last.value AS last_reading,
+        r_last.reading_date AS last_reading_date,
+        r_prev.value AS prev_reading,
+        r_prev.reading_date AS prev_reading_date,
+        (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
+        p.payment_date AS paid_date,
+        p.paid_reading AS paid_kwh,
+        p.id as payment_id
+      FROM users u
+      LEFT JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS max_date
+          FROM readings
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
+      ) r_last ON u.id = r_last.user_id
+      LEFT JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS prev_date
           FROM readings
           WHERE (user_id, reading_date) NOT IN (
             SELECT user_id, MAX(reading_date)
@@ -98,21 +166,31 @@ app.get("/api/users", authMiddleware, async (req, res) => {
             GROUP BY user_id
           )
           GROUP BY user_id
-        )
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
       ) r_prev ON u.id = r_prev.user_id
       LEFT JOIN (
-        SELECT * FROM payments p1
-        WHERE (p1.user_id, p1.payment_date) IN (
-          SELECT user_id, MAX(payment_date)
+        SELECT p1.*
+        FROM payments p1
+        INNER JOIN (
+          SELECT user_id, MAX(payment_date) AS max_date
           FROM payments
           GROUP BY user_id
-        )
+        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
       ORDER BY u.plot_number
-    `);
-
+    `;
+    if (month) {
+      const { from, to } = getMonthRange(month);
+      [rows] = await db.query(sqlPeriod, [from, to, from, to, from, to]);
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ error: `За выбранный период (${month}) данные отсутствуют.` });
+      }
+    } else {
+      [rows] = await db.query(sqlAll);
+    }
     res.json(rows);
   } catch (err) {
+    console.error("Ошибка в /api/users:", err);
     res.status(500).json({ error: "Database error", details: err.message });
   }
 });
@@ -122,7 +200,21 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
   if (!user_id || !reading_date || value == null) {
     return res.status(400).json({ error: "Не все поля заполнены" });
   }
+
   try {
+    // Проверяем, есть ли уже показания за эту дату
+    const [existing] = await db.query(
+      "SELECT id FROM readings WHERE user_id = ? AND reading_date = ?",
+      [user_id, reading_date]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ 
+        error: "Показания за эту дату уже существуют",
+        details: "Нельзя ввести показания дважды за один день"
+      });
+    }
+
     await db.query(
       `INSERT INTO readings (user_id, reading_date, value) VALUES (?, ?, ?)`,
       [user_id, reading_date, value]
@@ -130,6 +222,16 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Ошибка вставки", details: err.message });
+  }
+});
+
+app.delete("/api/readings/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.query("DELETE FROM readings WHERE id = ?", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка удаления", details: err.message });
   }
 });
 
@@ -182,6 +284,25 @@ app.get("/api/users/:id", authMiddleware, async (req, res) => {
   }
 });
 
+app.put("/api/users/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { full_name, phone } = req.body;
+  
+  if (!full_name) {
+    return res.status(400).json({ message: "ФИО обязательно для заполнения" });
+  }
+
+  try {
+    await db.query(
+      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
+      [full_name, phone, id]
+    );
+    res.json({ success: true, message: "Данные успешно обновлены" });
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка обновления данных", details: err.message });
+  }
+});
+
 app.post("/api/login", async (req, res) => {
   const { login, password } = req.body;
   if (!login || !password) {
@@ -219,7 +340,174 @@ app.get("/api/tariffs", authMiddleware, async (req, res) => {
   }
 });
 
+// Получить последние показания по каждому пользователю
+app.get("/api/last-readings", authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        u.id as user_id,
+        u.plot_number,
+        u.full_name,
+        r.id as reading_id,
+        r.reading_date,
+        r.value
+      FROM users u
+      LEFT JOIN (
+        SELECT r1.* FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS max_date
+          FROM readings
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
+      ) r ON u.id = r.user_id
+      ORDER BY u.plot_number
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
+// Получить последние оплаты по каждому пользователю
+app.get("/api/last-payments", authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        u.id as user_id,
+        u.plot_number,
+        u.full_name,
+        p.id as payment_id,
+        p.payment_date,
+        p.paid_reading,
+        p.unpaid_kwh,
+        p.debt
+      FROM users u
+      LEFT JOIN (
+        SELECT p1.* FROM payments p1
+        INNER JOIN (
+          SELECT user_id, MAX(payment_date) AS max_date
+          FROM payments
+          GROUP BY user_id
+        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
+      ) p ON u.id = p.user_id
+      ORDER BY u.plot_number
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
+// Получить показания за период
+app.get("/api/readings", authMiddleware, async (req, res) => {
+  const { from, to } = req.query;
+  if (!from || !to) {
+    return res.status(400).json({ error: "Необходимо указать параметры from и to" });
+  }
+  try {
+    const [rows] = await db.query(`
+      SELECT u.plot_number, u.full_name, r.reading_date, r.value
+      FROM readings r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.reading_date BETWEEN ? AND ?
+      ORDER BY u.plot_number, r.reading_date
+    `, [from, to]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка получения показаний", details: err.message });
+  }
+});
+
+// История показаний по пользователю
+app.get("/api/user-readings/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT reading_date, value FROM readings WHERE user_id = ? ORDER BY reading_date DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка получения показаний", details: err.message });
+  }
+});
+
+// История оплат по пользователю
+app.get("/api/user-payments/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT 
+         p.payment_date, 
+         p.paid_reading, 
+         p.debt,
+         (SELECT value FROM tariff WHERE effective_date <= p.payment_date ORDER BY effective_date DESC LIMIT 1) AS tariff
+       FROM payments p
+       WHERE p.user_id = ?
+       ORDER BY p.payment_date DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка получения оплат", details: err.message });
+  }
+});
+
+// Удаление оплаты по id
+app.delete("/api/payments/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.query("DELETE FROM payments WHERE id = ?", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка удаления оплаты", details: err.message });
+  }
+});
+
+// Получить последние показания и оплаты по каждому пользователю
+app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        u.id AS id,
+        u.plot_number,
+        u.full_name,
+        r.value AS last_reading,
+        r.reading_date AS last_reading_date,
+        p.paid_reading,
+        p.payment_date,
+        p.id AS payment_id,
+        p.unpaid_kwh,
+        p.debt
+      FROM users u
+      LEFT JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS max_date
+          FROM readings
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
+      ) r ON u.id = r.user_id
+      LEFT JOIN (
+        SELECT p1.*
+        FROM payments p1
+        INNER JOIN (
+          SELECT user_id, MAX(payment_date) AS max_date
+          FROM payments
+          GROUP BY user_id
+        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
+      ) p ON u.id = p.user_id
+      ORDER BY u.plot_number
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Ошибка получения последних данных", details: err.message });
+  }
+});
+
+app.use("/api/viber", viberRoutes(db));
 
 app.listen(PORT, () => {
-  console.log(`\u2705 Server is running on port ${PORT}`);
+  console.log(`✅ Server is running on port ${PORT}`);
 });

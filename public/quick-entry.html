@@ -18,6 +18,17 @@
       text-align: center;
       vertical-align: middle;
     }
+    .search-box {
+      margin-bottom: 1rem;
+    }
+    .delete-reading {
+      color: #dc3545;
+      cursor: pointer;
+      margin-left: 0.5rem;
+    }
+    .delete-reading:hover {
+      text-decoration: underline;
+    }
   </style>
   <script>
     const token = localStorage.getItem("token");
@@ -32,9 +43,15 @@
   <div class="container py-4">
     <h2 class="mb-4">⚡ Быстрый ввод показаний</h2>
 
-    <div class="mb-3">
-      <label for="common-date" class="form-label">Дата показаний</label>
-      <input type="date" id="common-date" class="form-control" value="" />
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <label for="common-date" class="form-label">Дата показаний</label>
+        <input type="date" id="common-date" class="form-control" value="" />
+      </div>
+      <div class="col-md-8">
+        <label for="search" class="form-label">Поиск</label>
+        <input type="text" id="search" class="form-control" placeholder="Поиск по номеру участка или фамилии..." />
+      </div>
     </div>
 
     <form id="bulk-form">
@@ -56,6 +73,8 @@
   </div>
 
   <script>
+    let allUsers = []; // Храним все данные пользователей
+
     async function loadNavbar() {
       const res = await fetch("/partials/nav.html");
       const html = await res.text();
@@ -80,31 +99,59 @@
       return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
     }
 
+    function filterUsers(users, searchTerm) {
+      if (!searchTerm) return users;
+      searchTerm = searchTerm.toLowerCase();
+      return users.filter(u => 
+        u.plot_number.toString().includes(searchTerm) || 
+        u.full_name.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    function getUniqueByPlotNumber(users) {
+      const seen = new Set();
+      return users.filter(u => {
+        if (seen.has(u.plot_number)) return false;
+        seen.add(u.plot_number);
+        return true;
+      });
+    }
+
     async function loadData() {
       const res = await fetch("/api/users", {
         headers: { Authorization: "Bearer " + localStorage.getItem("token") }
       });
-      const users = await res.json();
+      allUsers = await res.json();
+      renderTable();
+    }
+
+    function renderTable() {
+      const searchTerm = document.getElementById("search").value;
+      const filteredUsers = getUniqueByPlotNumber(filterUsers(allUsers, searchTerm));
       const tbody = document.getElementById("quick-table-body");
       tbody.innerHTML = "";
       const selectedDate = document.getElementById("common-date").value;
 
-      users.forEach(u => {
+      filteredUsers.forEach(u => {
         const row = document.createElement("tr");
         row.dataset.userId = u.id;
         const lastDate = u.last_reading_date?.slice(0, 10);
         const disabled = lastDate === selectedDate;
         const inputField = disabled
-          ? "Уже есть"
+          ? `<span class="text-danger">Показания за ${formatDate(selectedDate)} уже введены</span>`
           : `<input type="number" class="form-control new-value" min="${u.last_reading ?? 0}" placeholder="кВт⋅ч" data-previous="${u.last_reading ?? 0}" />`;
         const buttonField = disabled
           ? "-"
-          : `<button type="button" class="btn btn-outline-secondary btn-copy-old">Без изменений</button>`;
+          : `<button type="button" class="btn btn-outline-secondary btn-copy-old">Без изменений</button> <button type="button" class="btn btn-primary btn-save-one">Сохранить</button>`;
+
+        const deleteButton = u.last_reading_date 
+          ? `<span class="delete-reading" data-reading-id="${u.reading_id}" title="Удалить последнее показание">❌</span>`
+          : "";
 
         row.innerHTML = `
           <td>${u.plot_number}</td>
           <td>${u.full_name}</td>
-          <td class="text-center last-reading">${u.last_reading ?? "-"}</td>
+          <td class="text-center last-reading">${u.last_reading ?? "-"} ${deleteButton}</td>
           <td class="text-center last-reading">${formatDate(u.last_reading_date)}</td>
           <td>${inputField}</td>
           <td>${buttonField}</td>
@@ -144,6 +191,7 @@
       e.preventDefault();
       const rows = document.querySelectorAll("#quick-table-body tr");
       const reading_date = document.getElementById("common-date").value;
+      let hasErrors = false;
 
       for (const row of rows) {
         const user_id = row.dataset.userId;
@@ -151,51 +199,133 @@
         const value = input?.value;
         if (!value) continue;
 
-        const res = await fetch("/api/readings", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + localStorage.getItem("token"),
-          },
-          body: JSON.stringify({ user_id, reading_date, value }),
-        });
+        try {
+          const res = await fetch("/api/readings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + localStorage.getItem("token"),
+            },
+            body: JSON.stringify({ user_id, reading_date, value }),
+          });
 
-        if (res.ok) {
-          row.classList.remove("table-danger");
-          row.classList.add("table-success");
-        } else {
+          if (res.ok) {
+            row.classList.remove("table-danger");
+            row.classList.add("table-success");
+          } else {
+            const error = await res.json();
+            row.classList.add("table-danger");
+            const errorCell = row.querySelector("td:nth-last-child(2)");
+            errorCell.innerHTML = `<span class="text-danger">${error.error}</span>`;
+            hasErrors = true;
+          }
+        } catch (err) {
           row.classList.add("table-danger");
+          const errorCell = row.querySelector("td:nth-last-child(2)");
+          errorCell.innerHTML = `<span class="text-danger">Ошибка при сохранении</span>`;
+          hasErrors = true;
         }
       }
 
-      loadData();
+      if (!hasErrors) {
+        loadData();
+      }
     });
 
     document.addEventListener("click", async (e) => {
-      if (!e.target.classList.contains("btn-copy-old")) return;
-      const row = e.target.closest("tr");
-      const user_id = row.dataset.userId;
-      const reading_date = document.getElementById("common-date").value;
-      const value = row.cells[2].textContent;
+      if (e.target.classList.contains("btn-copy-old")) {
+        const row = e.target.closest("tr");
+        const user_id = row.dataset.userId;
+        const reading_date = document.getElementById("common-date").value;
+        const value = row.cells[2].textContent;
 
-      const res = await fetch("/api/readings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + localStorage.getItem("token"),
-        },
-        body: JSON.stringify({ user_id, reading_date, value }),
-      });
+        try {
+          const res = await fetch("/api/readings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + localStorage.getItem("token"),
+            },
+            body: JSON.stringify({ user_id, reading_date, value }),
+          });
 
-      if (res.ok) {
-        row.classList.add("table-success");
-        e.target.disabled = true;
-      } else {
-        row.classList.add("table-danger");
+          if (res.ok) {
+            row.classList.add("table-success");
+            e.target.disabled = true;
+          } else {
+            const error = await res.json();
+            row.classList.add("table-danger");
+            const errorCell = row.querySelector("td:nth-last-child(2)");
+            errorCell.innerHTML = `<span class="text-danger">${error.error}</span>`;
+          }
+        } catch (err) {
+          row.classList.add("table-danger");
+          const errorCell = row.querySelector("td:nth-last-child(2)");
+          errorCell.innerHTML = `<span class="text-danger">Ошибка при сохранении</span>`;
+        }
+      } else if (e.target.classList.contains("btn-save-one")) {
+        const row = e.target.closest("tr");
+        const user_id = row.dataset.userId;
+        const input = row.querySelector(".new-value");
+        const value = input?.value;
+        const reading_date = document.getElementById("common-date").value;
+        if (!value) {
+          input.classList.add("is-invalid");
+          return;
+        }
+        try {
+          const res = await fetch("/api/readings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + localStorage.getItem("token"),
+            },
+            body: JSON.stringify({ user_id, reading_date, value }),
+          });
+          if (res.ok) {
+            row.classList.remove("table-danger");
+            row.classList.add("table-success");
+            input.classList.remove("is-invalid");
+            input.disabled = true;
+            e.target.disabled = true;
+          } else {
+            const error = await res.json();
+            row.classList.add("table-danger");
+            const errorCell = row.querySelector("td:nth-last-child(2)");
+            errorCell.innerHTML = `<span class="text-danger">${error.error}</span>`;
+          }
+        } catch (err) {
+          row.classList.add("table-danger");
+          const errorCell = row.querySelector("td:nth-last-child(2)");
+          errorCell.innerHTML = `<span class="text-danger">Ошибка при сохранении</span>`;
+        }
+      } else if (e.target.classList.contains("delete-reading")) {
+        if (!confirm("Вы уверены, что хотите удалить это показание?")) return;
+        const readingId = e.target.getAttribute("data-reading-id");
+        if (!readingId) {
+          alert("Ошибка: ID показания не найден");
+          return;
+        }
+        try {
+          const res = await fetch(`/api/readings/${readingId}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: "Bearer " + localStorage.getItem("token"),
+            },
+          });
+          if (res.ok) {
+            loadData();
+          } else {
+            alert("Ошибка при удалении показания");
+          }
+        } catch (err) {
+          alert("Ошибка при удалении показания");
+        }
       }
     });
 
     document.getElementById("common-date").addEventListener("change", loadData);
+    document.getElementById("search").addEventListener("input", renderTable);
 
     loadNavbar();
     document.getElementById("common-date").value = new Date().toISOString().slice(0, 10);

@@ -22,6 +22,16 @@
   <div class="container py-4">
     <h2 class="mb-4">📋 Участки и показания</h2>
 
+    <form class="row g-3 mb-3" id="period-form">
+      <div class="col-md-3">
+        <label for="period-month" class="form-label">Месяц</label>
+        <input type="month" id="period-month" class="form-control" required />
+      </div>
+      <div class="col-md-3 align-self-end">
+        <button type="submit" class="btn btn-primary">Показать</button>
+      </div>
+    </form>
+
     <div class="table-responsive">
       <table class="table table-bordered table-striped table-hover">
         <thead class="table-primary text-center align-middle">
@@ -74,14 +84,45 @@
     }
 
     // Загружает данные пользователей
-    async function loadUsers() {
+    async function loadUsers(month) {
       try {
-        const res = await fetch("/api/users", {
+        let url = "/api/users";
+        if (month) {
+          url += `?month=${month}`;
+        }
+        const res = await fetch(url, {
           headers: { Authorization: "Bearer " + localStorage.getItem("token") },
         });
-        const users = await res.json();
         const tbody = document.getElementById("users-table-body");
+        let users = [];
+        if (res.status === 404) {
+          const err = await res.json();
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="11" class="text-center text-danger">${err.error || "Данные отсутствуют за выбранный период"}</td>
+            </tr>
+          `;
+          return;
+        } else if (res.ok) {
+          users = await res.json();
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="11" class="text-center text-danger">Ошибка загрузки данных</td>
+            </tr>
+          `;
+          return;
+        }
         tbody.innerHTML = "";
+
+        if (!users || !users.length) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="11" class="text-center text-danger">Нет данных за выбранный период</td>
+            </tr>
+          `;
+          return;
+        }
 
         users.forEach((u) => {
           const consumption =
@@ -92,7 +133,7 @@
           const row = document.createElement("tr");
           row.innerHTML = `
             <td class="text-center">
-              <a href="/update.html?id=${u.id}" title="Редактировать">✏️</a>
+              <a href="/user-details.html?id=${u.id}" title="Подробнее">🔍</a>
             </td>
             <td>${u.plot_number ?? "-"}</td>
             <td>${u.full_name ?? "-"}</td>
@@ -108,13 +149,33 @@
           tbody.appendChild(row);
         });
       } catch (err) {
+        const tbody = document.getElementById("users-table-body");
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="text-center text-danger">Ошибка загрузки данных</td>
+          </tr>
+        `;
         console.error("Ошибка загрузки данных пользователей:", err);
       }
     }
 
+    // Обработка выбора периода
+    document.getElementById("period-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const month = document.getElementById("period-month").value;
+      loadUsers(month);
+    });
+
+    // По умолчанию текущий месяц
+    function getCurrentMonth() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    }
+
     // Инициализация
     loadNavbar();
-    loadUsers();
+    document.getElementById("period-month").value = getCurrentMonth();
+    loadUsers(getCurrentMonth());
   </script>
 </body>
 </html>

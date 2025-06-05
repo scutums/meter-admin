@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Отчёт по показаниям</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="bg-light">
+  <div id="navbar-placeholder"></div>
+  <div class="container py-4">
+    <h2 class="mb-4">📊 Отчёт по показаниям</h2>
+    <form class="row g-3 mb-4" id="filter-form">
+      <div class="col-md-3">
+        <label for="date-from" class="form-label">С даты</label>
+        <input type="date" id="date-from" class="form-control" required />
+      </div>
+      <div class="col-md-3">
+        <label for="date-to" class="form-label">По дату</label>
+        <input type="date" id="date-to" class="form-control" required />
+      </div>
+      <div class="col-md-3 align-self-end">
+        <button type="submit" class="btn btn-primary">Показать</button>
+      </div>
+    </form>
+    <div id="report-table-wrapper">
+      <table class="table table-bordered table-hover align-middle">
+        <thead class="table-primary text-center align-middle">
+          <tr>
+            <th>Участок</th>
+            <th>ФИО</th>
+            <th>Дата</th>
+            <th>Показание</th>
+          </tr>
+        </thead>
+        <tbody id="report-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+    }
+
+    async function loadReport(dateFrom, dateTo) {
+      const res = await fetch(`/api/readings?from=${dateFrom}&to=${dateTo}`, {
+        headers: { Authorization: "Bearer " + localStorage.getItem("token") }
+      });
+      const data = await res.json();
+      const tbody = document.getElementById("report-table-body");
+      tbody.innerHTML = "";
+      data.forEach(r => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${r.plot_number}</td>
+          <td>${r.full_name}</td>
+          <td>${r.reading_date ? new Date(r.reading_date).toLocaleDateString() : '-'}</td>
+          <td>${r.value ?? '-'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    document.getElementById("filter-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const dateFrom = document.getElementById("date-from").value;
+      const dateTo = document.getElementById("date-to").value;
+      loadReport(dateFrom, dateTo);
+    });
+
+    // По умолчанию показываем прошлый месяц
+    function getDefaultDates() {
+      const now = new Date();
+      const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      return {
+        from: firstDayPrevMonth.toISOString().slice(0, 10),
+        to: lastDayPrevMonth.toISOString().slice(0, 10)
+      };
+    }
+
+    loadNavbar();
+    const def = getDefaultDates();
+    document.getElementById("date-from").value = def.from;
+    document.getElementById("date-to").value = def.to;
+    loadReport(def.from, def.to);
+  </script>
+</body>
+</html> 

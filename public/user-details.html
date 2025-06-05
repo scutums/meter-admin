@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Информация об участке</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="bg-light">
+  <div id="navbar-placeholder"></div>
+  <div class="container py-4">
+    <h2 class="mb-4">🔍 Информация об участке</h2>
+    <div id="user-info" class="mb-4"></div>
+    <div class="row">
+      <div class="col-md-6">
+        <h4>История показаний</h4>
+        <table class="table table-bordered table-hover">
+          <thead class="table-primary text-center align-middle">
+            <tr>
+              <th>Дата</th>
+              <th>Показание</th>
+            </tr>
+          </thead>
+          <tbody id="readings-table"></tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h4>История оплат</h4>
+        <table class="table table-bordered table-hover">
+          <thead class="table-primary text-center align-middle">
+            <tr>
+              <th>Дата оплаты</th>
+              <th>Оплачено (кВт⋅ч)</th>
+              <th>Тариф</th>
+              <th>Сумма</th>
+              <th>Долг</th>
+            </tr>
+          </thead>
+          <tbody id="payments-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script>
+    async function loadNavbar() {
+      const res = await fetch("/partials/nav.html");
+      const html = await res.text();
+      document.getElementById("navbar-placeholder").innerHTML = html;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return "-";
+      const date = new Date(dateStr);
+      if (isNaN(date)) return "-";
+      return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.${date.getFullYear()}`;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("id");
+    const token = localStorage.getItem("token");
+
+    async function loadUser() {
+      const res = await fetch(`/api/users/${userId}`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (!res.ok) {
+        document.getElementById("user-info").innerHTML = `<div class='alert alert-danger'>Ошибка загрузки данных пользователя</div>`;
+        return;
+      }
+      const u = await res.json();
+      document.getElementById("user-info").innerHTML = `
+        <form id="edit-user-form" class="row g-3 mb-3">
+          <div class="col-md-2">
+            <label class="form-label">Участок</label>
+            <div class="form-control-plaintext fw-bold fs-5">${u.plot_number}</div>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">ФИО</label>
+            <input type="text" class="form-control" id="full_name" value="${u.full_name}" required />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Телефон</label>
+            <input type="text" class="form-control" id="phone" value="${u.phone || ''}" />
+          </div>
+          <div class="col-md-2 align-self-end">
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+          </div>
+        </form>
+        <div id="user-message"></div>
+      `;
+      document.getElementById("edit-user-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const full_name = document.getElementById("full_name").value;
+        const phone = document.getElementById("phone").value;
+        const payload = { full_name, phone };
+        const res = await fetch(`/api/users/${userId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token
+          },
+          body: JSON.stringify(payload)
+        });
+        const msg = document.getElementById("user-message");
+        if (res.ok) {
+          msg.innerHTML = `<div class='alert alert-success'>Данные успешно обновлены</div>`;
+        } else {
+          const err = await res.json();
+          msg.innerHTML = `<div class='alert alert-danger'>Ошибка: ${err.message || 'Не удалось сохранить'}</div>`;
+        }
+      });
+    }
+
+    async function loadReadings() {
+      const res = await fetch(`/api/user-readings/${userId}`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const data = await res.json();
+      const tbody = document.getElementById("readings-table");
+      tbody.innerHTML = "";
+      data.forEach(r => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${formatDate(r.reading_date)}</td>
+          <td>${r.value}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function loadPayments() {
+      const res = await fetch(`/api/user-payments/${userId}`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const data = await res.json();
+      const tbody = document.getElementById("payments-table");
+      tbody.innerHTML = "";
+      data.forEach(p => {
+        const row = document.createElement("tr");
+        const sum = (p.paid_reading && p.tariff) ? (p.paid_reading * p.tariff).toFixed(2) : '-';
+        row.innerHTML = `
+          <td>${formatDate(p.payment_date)}</td>
+          <td>${p.paid_reading ?? '-'}</td>
+          <td>${p.tariff ?? '-'}</td>
+          <td>${sum}</td>
+          <td>${p.debt ?? '-'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    loadNavbar();
+    loadUser();
+    loadReadings();
+    loadPayments();
+  </script>
+</body>
+</html> 
