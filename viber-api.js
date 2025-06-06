@@ -39,16 +39,34 @@ export default function viberRoutes(db) {
   }
 
   // Функция для отправки сообщений в Viber
-  async function sendViberMessage(viber_id, message) {
+  async function sendViberMessage(viber_id, message, buttons = null) {
     try {
       console.log(`Sending message to ${viber_id}: ${message}`);
       console.log('Using Viber token:', VIBER_AUTH_TOKEN);
       
-      const response = await axios.post("https://chatapi.viber.com/pa/send_message", {
+      const messageData = {
         receiver: viber_id,
         type: "text",
         text: message
-      }, {
+      };
+
+      if (buttons) {
+        messageData.keyboard = {
+          Type: "keyboard",
+          Buttons: buttons.map(button => ({
+            Columns: 3,
+            Rows: 1,
+            Text: button.text,
+            ActionType: "reply",
+            ActionBody: button.command,
+            TextSize: "regular",
+            TextHAlign: "center",
+            TextVAlign: "middle"
+          }))
+        };
+      }
+      
+      const response = await axios.post("https://chatapi.viber.com/pa/send_message", messageData, {
         headers: {
           "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
         }
@@ -57,6 +75,28 @@ export default function viberRoutes(db) {
     } catch (err) {
       console.error("Error sending Viber message:", err.response?.data || err.message);
     }
+  }
+
+  // Функция для получения кнопок команд
+  function getCommandButtons() {
+    return [
+      { text: "📋 Инфо", command: "инфо" },
+      { text: "📊 Показания", command: "показания" },
+      { text: "💰 Оплата", command: "оплата" },
+      { text: "📈 Расход", command: "расход" },
+      { text: "🔔 Уведомления", command: "уведомления" },
+      { text: "⏰ Напоминание", command: "напоминание" },
+      { text: "📱 Телефон", command: "телефон" },
+      { text: "❌ Отвязать", command: "отвязать" },
+      { text: "❓ Помощь", command: "помощь" }
+    ];
+  }
+
+  // Функция для получения кнопок регистрации
+  function getRegistrationButtons() {
+    return [
+      { text: "❌ Отмена", command: "отмена" }
+    ];
   }
 
   // Функция для расчета среднего расхода
@@ -111,166 +151,14 @@ export default function viberRoutes(db) {
         const [users] = await db.query("SELECT * FROM users WHERE viber_id = ?", [viber_id]);
         console.log(`User lookup result:`, users);
         
-        if (users.length === 0) {
-          // Проверяем, есть ли сохраненный номер телефона для этого viber_id
-          const [tempRegistrations] = await db.query(
-            "SELECT * FROM temp_registrations WHERE viber_id = ?",
-            [viber_id]
-          );
-          console.log('Temp registration lookup:', tempRegistrations);
-
-          if (tempRegistrations.length === 0) {
-            // Простая заглушка для тестирования
-            if (message_text === '123') {
-              console.log('Test phone number detected');
-              // Сохраняем номер телефона во временную таблицу
-              await db.query(
-                "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                [viber_id, '380505699852'] // Сохраняем реальный номер в базу
-              );
-
-              await sendViberMessage(
-                viber_id,
-                "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
-              );
-              return res.status(200).json({ status: "ok" });
-            }
-            
-            // Проверка реального номера телефона
-            const phoneNumber = message_text.trim();
-            console.log('Original phone number:', phoneNumber);
-            
-            // Нормализуем номер телефона (оставляем только цифры)
-            const normalizedPhone = phoneNumber.replace(/\D/g, '');
-            console.log('Normalized phone number:', normalizedPhone);
-            
-            // Проверяем формат номера (12 цифр, начинается с 380)
-            const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
-            console.log('Is valid format:', isValidFormat);
-            
-            if (isValidFormat) {
-              console.log('Phone number format is valid');
-              
-              // Ищем пользователя по номеру телефона
-              const [usersByPhone] = await db.query(
-                "SELECT * FROM users WHERE phone = ?",
-                [normalizedPhone]
-              );
-              console.log('Users found by phone:', usersByPhone);
-
-              if (usersByPhone.length > 0) {
-                const user = usersByPhone[0];
-                console.log('Found user:', user);
-                
-                if (user.viber_id) {
-                  console.log('User already has viber_id:', user.viber_id);
-                  await sendViberMessage(
-                    viber_id,
-                    "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
-                  );
-                } else {
-                  console.log('Saving to temp_registrations');
-                  // Сохраняем номер телефона во временную таблицу
-                  await db.query(
-                    "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                    [viber_id, normalizedPhone]
-                  );
-
-                  await sendViberMessage(
-                    viber_id,
-                    "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
-                  );
-                }
-              } else {
-                console.log('No user found with this phone number');
-                await sendViberMessage(
-                  viber_id,
-                  "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
-                );
-              }
-            } else {
-              console.log('Invalid phone number format');
-              await sendViberMessage(
-                viber_id,
-                "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования"
-              );
-            }
-            return res.status(200).json({ status: "ok" });
-          } else {
-            // Второй шаг: проверяем номер участка
-            const plotNumber = message_text.trim();
-            console.log('Checking plot number:', plotNumber);
-            
-            if (plotNumber.match(/^\d+$/)) {
-              // Получаем сохраненный номер телефона
-              const tempReg = tempRegistrations[0];
-              
-              // Проверяем, что участок принадлежит этому пользователю
-              const [usersByPlot] = await db.query(
-                "SELECT * FROM users WHERE plot_number = ? AND phone = ? AND viber_id IS NULL",
-                [plotNumber, tempReg.phone]
-              );
-              console.log('Users found by plot and phone:', usersByPlot);
-
-              if (usersByPlot.length > 0) {
-                // Получаем информацию о пользователе Viber
-                const viberUser = await getViberUserDetails(viber_id);
-                const userDetails = viberUser ? JSON.stringify(viberUser) : null;
-
-                // Обновляем viber_id и информацию о пользователе
-                await db.query(
-                  "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
-                  [viber_id, userDetails, usersByPlot[0].id]
-                );
-
-                // Удаляем временную регистрацию
-                await db.query(
-                  "DELETE FROM temp_registrations WHERE viber_id = ?",
-                  [viber_id]
-                );
-
-                // Логируем регистрацию
-                await db.query(
-                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                   VALUES (?, ?, ?)`,
-                  [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber} и телефоном ${tempReg.phone}`]
-                );
-
-                await sendViberMessage(
-                  viber_id,
-                  `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-                );
-              } else {
-                await sendViberMessage(
-                  viber_id,
-                  "Участок с таким номером не найден или не привязан к вашему номеру телефона.\n\nПожалуйста, проверьте номер и попробуйте снова.\n\nЕсли вы уверены, что номер правильный, обратитесь в правление.\n\nДля отмены регистрации отправьте 'отмена'"
-                );
-              }
-            } else if (message_text.toLowerCase() === 'отмена') {
-              // Удаляем временную регистрацию
-              await db.query(
-                "DELETE FROM temp_registrations WHERE viber_id = ?",
-                [viber_id]
-              );
-              await sendViberMessage(
-                viber_id,
-                "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
-              );
-            } else {
-              await sendViberMessage(
-                viber_id,
-                "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка.\n\nДля отмены регистрации отправьте 'отмена'"
-              );
-            }
-          }
-        }
-
-        const user = users[0];
-
-        // Обработка команд
-        switch (message_text) {
-          case "помощь":
-            const helpMessage = `Доступные команды:
+        if (users.length > 0) {
+          // Пользователь уже зарегистрирован, обрабатываем команды
+          const user = users[0];
+          
+          // Обработка команд
+          switch (message_text) {
+            case "помощь":
+              const helpMessage = `Доступные команды:
 📋 инфо - общая информация по участку
 📊 показания - последние показания счетчика
 💰 оплата - информация о последней оплате
@@ -280,361 +168,466 @@ export default function viberRoutes(db) {
 📱 телефон - показать привязанный номер телефона
 ❌ отвязать - отвязать Viber от участка
 ❓ помощь - показать это сообщение`;
-            await sendViberMessage(viber_id, helpMessage);
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'help_request', 'Запрос списка команд']
-            );
-            break;
+              await sendViberMessage(viber_id, helpMessage, getCommandButtons());
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'help_request', 'Запрос списка команд']
+              );
+              break;
 
-          case "телефон":
-            if (user.phone) {
+            case "телефон":
+              if (user.phone) {
+                await sendViberMessage(
+                  viber_id,
+                  `Ваш привязанный номер телефона: ${user.phone}`,
+                  getCommandButtons()
+                );
+              } else {
+                await sendViberMessage(
+                  viber_id,
+                  "У вас не привязан номер телефона в системе.",
+                  getCommandButtons()
+                );
+              }
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'phone_check', 'Проверка привязанного номера телефона']
+              );
+              break;
+
+            case "расход":
+              const [consumptionReadings] = await db.query(
+                `SELECT reading_date, value 
+                 FROM readings 
+                 WHERE user_id = ? 
+                 ORDER BY reading_date DESC 
+                 LIMIT 6`,
+                [user.id]
+              );
+
+              if (consumptionReadings.length < 2) {
+                await sendViberMessage(viber_id, "Недостаточно данных для расчета расхода.");
+              } else {
+                let consumptionMessage = "Расход электроэнергии:\n\n";
+                for (let i = 0; i < consumptionReadings.length - 1; i++) {
+                  const currentDate = new Date(consumptionReadings[i].reading_date);
+                  const prevDate = new Date(consumptionReadings[i + 1].reading_date);
+                  const consumption = consumptionReadings[i].value - consumptionReadings[i + 1].value;
+                  const monthName = currentDate.toLocaleString('ru-RU', { month: 'long' });
+                  consumptionMessage += `${monthName}: ${consumption} кВт⋅ч\n`;
+                }
+
+                const avgConsumption = await calculateAverageConsumption(user.id);
+                if (avgConsumption) {
+                  consumptionMessage += `\n📊 Средний расход: ${avgConsumption} кВт⋅ч/мес`;
+                }
+
+                await sendViberMessage(viber_id, consumptionMessage);
+              }
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'consumption_request', `Запрос расхода по участку ${user.plot_number}`]
+              );
+              break;
+
+            case "уведомления":
+              const [settings] = await db.query(
+                "SELECT notifications_enabled FROM users WHERE id = ?",
+                [user.id]
+              );
+              const currentStatus = settings[0]?.notifications_enabled ? "включены" : "выключены";
+              const newStatus = !settings[0]?.notifications_enabled;
+
+              await db.query(
+                "UPDATE users SET notifications_enabled = ? WHERE id = ?",
+                [newStatus, user.id]
+              );
+
               await sendViberMessage(
                 viber_id,
-                `Ваш привязанный номер телефона: ${user.phone}`
+                `Уведомления ${newStatus ? "включены" : "выключены"}.\n\nВы будете получать уведомления о:\n📊 Новых показаниях\n💰 Новых оплатах\n⚠️ Большом расходе`,
+                getCommandButtons()
               );
-            } else {
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'notifications_toggle', `Изменение статуса уведомлений на ${newStatus}`]
+              );
+              break;
+
+            case "напоминание":
+              const [reminderSettings] = await db.query(
+                "SELECT reminder_day FROM users WHERE id = ?",
+                [user.id]
+              );
+              const currentDay = reminderSettings[0]?.reminder_day || 25;
+
               await sendViberMessage(
                 viber_id,
-                "У вас не привязан номер телефона в системе."
+                `Текущий день напоминания: ${currentDay} число каждого месяца.\n\nДля изменения отправьте число от 1 до 28.`,
+                getRegistrationButtons()
               );
-            }
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'phone_check', 'Проверка привязанного номера телефона']
-            );
-            break;
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'reminder_request', `Запрос настройки напоминаний`]
+              );
+              break;
 
-          case "расход":
-            const [consumptionReadings] = await db.query(
-              `SELECT reading_date, value 
-               FROM readings 
-               WHERE user_id = ? 
-               ORDER BY reading_date DESC 
-               LIMIT 6`,
-              [user.id]
-            );
+            case "инфо":
+              const [[tariffRow]] = await db.query(
+                `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
+              );
+              const tariff = tariffRow?.value || 4.75;
 
-            if (consumptionReadings.length < 2) {
-              await sendViberMessage(viber_id, "Недостаточно данных для расчета расхода.");
-            } else {
-              let consumptionMessage = "Расход электроэнергии:\n\n";
-              for (let i = 0; i < consumptionReadings.length - 1; i++) {
-                const currentDate = new Date(consumptionReadings[i].reading_date);
-                const prevDate = new Date(consumptionReadings[i + 1].reading_date);
-                const consumption = consumptionReadings[i].value - consumptionReadings[i + 1].value;
-                const monthName = currentDate.toLocaleString('ru-RU', { month: 'long' });
-                consumptionMessage += `${monthName}: ${consumption} кВт⋅ч\n`;
-              }
+              const [[lastPayment]] = await db.query(
+                `SELECT payment_date, paid_reading, debt, 
+                  (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
+                 FROM payments WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1`,
+                [user.id]
+              );
 
-              const avgConsumption = await calculateAverageConsumption(user.id);
-              if (avgConsumption) {
-                consumptionMessage += `\n📊 Средний расход: ${avgConsumption} кВт⋅ч/мес`;
-              }
-
-              await sendViberMessage(viber_id, consumptionMessage);
-            }
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'consumption_request', `Запрос расхода по участку ${user.plot_number}`]
-            );
-            break;
-
-          case "уведомления":
-            const [settings] = await db.query(
-              "SELECT notifications_enabled FROM users WHERE id = ?",
-              [user.id]
-            );
-            const currentStatus = settings[0]?.notifications_enabled ? "включены" : "выключены";
-            const newStatus = !settings[0]?.notifications_enabled;
-
-            await db.query(
-              "UPDATE users SET notifications_enabled = ? WHERE id = ?",
-              [newStatus, user.id]
-            );
-
-            await sendViberMessage(
-              viber_id,
-              `Уведомления ${newStatus ? "включены" : "выключены"}.\n\nВы будете получать уведомления о:\n📊 Новых показаниях\n💰 Новых оплатах\n⚠️ Большом расходе`
-            );
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'notifications_toggle', `Изменение статуса уведомлений на ${newStatus}`]
-            );
-            break;
-
-          case "напоминание":
-            const [reminderSettings] = await db.query(
-              "SELECT reminder_day FROM users WHERE id = ?",
-              [user.id]
-            );
-            const currentDay = reminderSettings[0]?.reminder_day || 25;
-
-            await sendViberMessage(
-              viber_id,
-              `Текущий день напоминания: ${currentDay} число каждого месяца.\n\nДля изменения отправьте число от 1 до 28.`
-            );
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'reminder_request', `Запрос настройки напоминаний`]
-            );
-            break;
-
-          case "инфо":
-            const [[tariffRow]] = await db.query(
-              `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
-            );
-            const tariff = tariffRow?.value || 4.75;
-
-            const [[lastPayment]] = await db.query(
-              `SELECT payment_date, paid_reading, debt, 
-                (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
-               FROM payments WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1`,
-              [user.id]
-            );
-
-            const debt = lastPayment ? lastPayment.debt : null;
-            const message = `Информация по участку ${user.plot_number}:
+              const debt = lastPayment ? lastPayment.debt : null;
+              const message = `Информация по участку ${user.plot_number}:
 👤 Владелец: ${user.full_name}
 💰 Долг: ${debt ?? 'нет данных'}
 💵 Текущий тариф: ${tariff} руб/кВт⋅ч`;
-            
-            await sendViberMessage(viber_id, message);
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'info_request', `Запрос информации по участку ${user.plot_number}`]
-            );
-            break;
+              
+              await sendViberMessage(viber_id, message);
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'info_request', `Запрос информации по участку ${user.plot_number}`]
+              );
+              break;
 
-          case "показания":
-            const [meterReadings] = await db.query(
-              `SELECT reading_date, value 
-               FROM readings 
-               WHERE user_id = ? 
-               ORDER BY reading_date DESC 
-               LIMIT 3`,
-              [user.id]
-            );
+            case "показания":
+              const [meterReadings] = await db.query(
+                `SELECT reading_date, value 
+                 FROM readings 
+                 WHERE user_id = ? 
+                 ORDER BY reading_date DESC 
+                 LIMIT 3`,
+                [user.id]
+              );
 
-            if (meterReadings.length === 0) {
-              await sendViberMessage(viber_id, "Показания счетчика отсутствуют.");
-            } else {
-              let readingsMessage = "Последние показания счетчика:\n";
-              meterReadings.forEach(r => {
-                const date = new Date(r.reading_date).toLocaleDateString('ru-RU');
-                readingsMessage += `📅 ${date}: ${r.value} кВт⋅ч\n`;
-              });
-              await sendViberMessage(viber_id, readingsMessage);
-            }
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'readings_request', `Запрос показаний по участку ${user.plot_number}`]
-            );
-            break;
+              if (meterReadings.length === 0) {
+                await sendViberMessage(viber_id, "Показания счетчика отсутствуют.");
+              } else {
+                let readingsMessage = "Последние показания счетчика:\n";
+                meterReadings.forEach(r => {
+                  const date = new Date(r.reading_date).toLocaleDateString('ru-RU');
+                  readingsMessage += `📅 ${date}: ${r.value} кВт⋅ч\n`;
+                });
+                await sendViberMessage(viber_id, readingsMessage);
+              }
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'readings_request', `Запрос показаний по участку ${user.plot_number}`]
+              );
+              break;
 
-          case "оплата":
-            const [[lastPaymentInfo]] = await db.query(
-              `SELECT payment_date, paid_reading, 
-                (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
-               FROM payments 
-               WHERE user_id = ? 
-               ORDER BY payment_date DESC 
-               LIMIT 1`,
-              [user.id]
-            );
+            case "оплата":
+              const [[lastPaymentInfo]] = await db.query(
+                `SELECT payment_date, paid_reading, 
+                  (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
+                 FROM payments 
+                 WHERE user_id = ? 
+                 ORDER BY payment_date DESC 
+                 LIMIT 1`,
+                [user.id]
+              );
 
-            if (!lastPaymentInfo) {
-              await sendViberMessage(viber_id, "Информация об оплатах отсутствует.");
-            } else {
-              const paymentDate = new Date(lastPaymentInfo.payment_date).toLocaleDateString('ru-RU');
-              const amount = (lastPaymentInfo.paid_reading * lastPaymentInfo.tariff).toFixed(2);
-              const paymentMessage = `Последняя оплата:
+              if (!lastPaymentInfo) {
+                await sendViberMessage(viber_id, "Информация об оплатах отсутствует.");
+              } else {
+                const paymentDate = new Date(lastPaymentInfo.payment_date).toLocaleDateString('ru-RU');
+                const amount = (lastPaymentInfo.paid_reading * lastPaymentInfo.tariff).toFixed(2);
+                const paymentMessage = `Последняя оплата:
 📅 Дата: ${paymentDate}
 ⚡ Оплачено: ${lastPaymentInfo.paid_reading} кВт⋅ч
 💵 Сумма: ${amount} руб.
 💰 Тариф: ${lastPaymentInfo.tariff} руб/кВт⋅ч`;
-              await sendViberMessage(viber_id, paymentMessage);
-            }
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'payment_request', `Запрос информации об оплате по участку ${user.plot_number}`]
-            );
-            break;
-
-          case "отвязать":
-            await db.query(
-              "UPDATE users SET viber_id = NULL WHERE id = ?",
-              [user.id]
-            );
-            await sendViberMessage(
-              viber_id,
-              `Viber успешно отвязан от участка ${user.plot_number}. Для повторной привязки отправьте номер участка.`
-            );
-            await db.query(
-              `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-               VALUES (?, ?, ?)`,
-              [viber_id, 'unlink', `Отвязка Viber от участка ${user.plot_number}`]
-            );
-            break;
-
-          default:
-            // Проверяем, есть ли сохраненный номер телефона для этого viber_id
-            const [tempRegistrations] = await db.query(
-              "SELECT * FROM temp_registrations WHERE viber_id = ?",
-              [viber_id]
-            );
-
-            if (tempRegistrations.length === 0) {
-              // Простая заглушка для тестирования
-              if (message_text === '123') {
-                console.log('Test phone number detected');
-                // Сохраняем номер телефона во временную таблицу
-                await db.query(
-                  "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                  [viber_id, '380505699852'] // Сохраняем реальный номер в базу
-                );
-
-                await sendViberMessage(
-                  viber_id,
-                  "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
-                );
-                return res.status(200).json({ status: "ok" });
+                await sendViberMessage(viber_id, paymentMessage);
               }
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'payment_request', `Запрос информации об оплате по участку ${user.plot_number}`]
+              );
+              break;
 
-              // Проверка реального номера телефона
-              const phoneNumber = message_text.trim();
-              console.log('Original phone number:', phoneNumber);
-              
-              // Нормализуем номер телефона (оставляем только цифры)
-              const normalizedPhone = phoneNumber.replace(/\D/g, '');
-              console.log('Normalized phone number:', normalizedPhone);
-              
-              // Проверяем формат номера (12 цифр, начинается с 380)
-              const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
-              console.log('Is valid format:', isValidFormat);
-              
-              if (isValidFormat) {
-                console.log('Phone number format is valid');
+            case "отвязать":
+              await db.query(
+                "UPDATE users SET viber_id = NULL WHERE id = ?",
+                [user.id]
+              );
+              await sendViberMessage(
+                viber_id,
+                `Viber успешно отвязан от участка ${user.plot_number}. Для повторной привязки отправьте номер участка.`,
+                getRegistrationButtons()
+              );
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'unlink', `Отвязка Viber от участка ${user.plot_number}`]
+              );
+              break;
+
+            default:
+              // Проверяем, есть ли сохраненный номер телефона для этого viber_id
+              const [tempRegistrations] = await db.query(
+                "SELECT * FROM temp_registrations WHERE viber_id = ?",
+                [viber_id]
+              );
+
+              if (tempRegistrations.length === 0) {
+                // Простая заглушка для тестирования
+                if (message_text === '123') {
+                  console.log('Test phone number detected');
+                  // Сохраняем номер телефона во временную таблицу
+                  await db.query(
+                    "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                    [viber_id, '380505699852'] // Сохраняем реальный номер в базу
+                  );
+
+                  await sendViberMessage(
+                    viber_id,
+                    "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+                    getRegistrationButtons()
+                  );
+                  return res.status(200).json({ status: "ok" });
+                }
+
+                // Проверка реального номера телефона
+                const phoneNumber = message_text.trim();
+                console.log('Original phone number:', phoneNumber);
                 
-                // Ищем пользователя по номеру телефона
-                const [usersByPhone] = await db.query(
-                  "SELECT * FROM users WHERE phone = ?",
-                  [normalizedPhone]
-                );
-                console.log('Users found by phone:', usersByPhone);
-
-                if (usersByPhone.length > 0) {
-                  const user = usersByPhone[0];
-                  console.log('Found user:', user);
+                // Нормализуем номер телефона (оставляем только цифры)
+                const normalizedPhone = phoneNumber.replace(/\D/g, '');
+                console.log('Normalized phone number:', normalizedPhone);
+                
+                // Проверяем формат номера (12 цифр, начинается с 380)
+                const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+                console.log('Is valid format:', isValidFormat);
+                
+                if (isValidFormat) {
+                  console.log('Phone number format is valid');
                   
-                  if (user.viber_id) {
-                    console.log('User already has viber_id:', user.viber_id);
-                    await sendViberMessage(
-                      viber_id,
-                      "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
-                    );
-                  } else {
-                    console.log('Saving to temp_registrations');
-                    // Сохраняем номер телефона во временную таблицу
-                    await db.query(
-                      "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                      [viber_id, normalizedPhone]
-                    );
+                  // Ищем пользователя по номеру телефона
+                  const [usersByPhone] = await db.query(
+                    "SELECT * FROM users WHERE phone = ?",
+                    [normalizedPhone]
+                  );
+                  console.log('Users found by phone:', usersByPhone);
 
+                  if (usersByPhone.length > 0) {
+                    const user = usersByPhone[0];
+                    console.log('Found user:', user);
+                    
+                    if (user.viber_id) {
+                      console.log('User already has viber_id:', user.viber_id);
+                      await sendViberMessage(
+                        viber_id,
+                        "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса.",
+                        getRegistrationButtons()
+                      );
+                    } else {
+                      console.log('Saving to temp_registrations');
+                      // Сохраняем номер телефона во временную таблицу
+                      await db.query(
+                        "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                        [viber_id, normalizedPhone]
+                      );
+
+                      await sendViberMessage(
+                        viber_id,
+                        "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+                        getRegistrationButtons()
+                      );
+                    }
+                  } else {
+                    console.log('No user found with this phone number');
                     await sendViberMessage(
                       viber_id,
-                      "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
+                      "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление.",
+                      getRegistrationButtons()
                     );
                   }
                 } else {
-                  console.log('No user found with this phone number');
+                  console.log('Invalid phone number format');
                   await sendViberMessage(
                     viber_id,
-                    "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                    "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования",
+                    getRegistrationButtons()
                   );
                 }
               } else {
-                console.log('Invalid phone number format');
-                await sendViberMessage(
-                  viber_id,
-                  "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования"
-                );
-              }
-            } else {
-              // Второй шаг: проверяем номер участка
-              const plotNumber = message_text.trim();
-              console.log('Checking plot number:', plotNumber);
-              
-              if (plotNumber.match(/^\d+$/)) {
-                // Получаем сохраненный номер телефона
-                const tempReg = tempRegistrations[0];
+                // Второй шаг: проверяем номер участка
+                const plotNumber = message_text.trim();
+                console.log('Checking plot number:', plotNumber);
                 
-                // Проверяем, что участок принадлежит этому пользователю
-                const [usersByPlot] = await db.query(
-                  "SELECT * FROM users WHERE plot_number = ? AND phone = ? AND viber_id IS NULL",
-                  [plotNumber, tempReg.phone]
-                );
-                console.log('Users found by plot and phone:', usersByPlot);
-
-                if (usersByPlot.length > 0) {
-                  // Получаем информацию о пользователе Viber
-                  const viberUser = await getViberUserDetails(viber_id);
-                  const userDetails = viberUser ? JSON.stringify(viberUser) : null;
-
-                  // Обновляем viber_id и информацию о пользователе
-                  await db.query(
-                    "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
-                    [viber_id, userDetails, usersByPlot[0].id]
+                if (plotNumber.match(/^\d+$/)) {
+                  // Получаем сохраненный номер телефона
+                  const tempReg = tempRegistrations[0];
+                  
+                  // Проверяем, что участок принадлежит этому пользователю
+                  const [usersByPlot] = await db.query(
+                    "SELECT * FROM users WHERE plot_number = ? AND phone = ? AND viber_id IS NULL",
+                    [plotNumber, tempReg.phone]
                   );
+                  console.log('Users found by plot and phone:', usersByPlot);
 
+                  if (usersByPlot.length > 0) {
+                    // Получаем информацию о пользователе Viber
+                    const viberUser = await getViberUserDetails(viber_id);
+                    const userDetails = viberUser ? JSON.stringify(viberUser) : null;
+
+                    // Обновляем viber_id и информацию о пользователе
+                    await db.query(
+                      "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
+                      [viber_id, userDetails, usersByPlot[0].id]
+                    );
+
+                    // Удаляем временную регистрацию
+                    await db.query(
+                      "DELETE FROM temp_registrations WHERE viber_id = ?",
+                      [viber_id]
+                    );
+
+                    // Логируем регистрацию
+                    await db.query(
+                      `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                       VALUES (?, ?, ?)`,
+                      [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber} и телефоном ${tempReg.phone}`]
+                    );
+
+                    await sendViberMessage(
+                      viber_id,
+                      `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`,
+                      getCommandButtons()
+                    );
+                  } else {
+                    await sendViberMessage(
+                      viber_id,
+                      "Участок с таким номером не найден или не привязан к вашему номеру телефона.\n\nПожалуйста, проверьте номер и попробуйте снова.\n\nЕсли вы уверены, что номер правильный, обратитесь в правление.",
+                      getRegistrationButtons()
+                    );
+                  }
+                } else if (message_text.toLowerCase() === 'отмена') {
                   // Удаляем временную регистрацию
                   await db.query(
                     "DELETE FROM temp_registrations WHERE viber_id = ?",
                     [viber_id]
                   );
-
-                  // Логируем регистрацию
-                  await db.query(
-                    `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                     VALUES (?, ?, ?)`,
-                    [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber} и телефоном ${tempReg.phone}`]
-                  );
-
                   await sendViberMessage(
                     viber_id,
-                    `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`
+                    "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
                   );
                 } else {
                   await sendViberMessage(
                     viber_id,
-                    "Участок с таким номером не найден или не привязан к вашему номеру телефона.\n\nПожалуйста, проверьте номер и попробуйте снова.\n\nЕсли вы уверены, что номер правильный, обратитесь в правление.\n\nДля отмены регистрации отправьте 'отмена'"
+                    "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка.",
+                    getRegistrationButtons()
                   );
                 }
-              } else if (message_text.toLowerCase() === 'отмена') {
-                // Удаляем временную регистрацию
-                await db.query(
-                  "DELETE FROM temp_registrations WHERE viber_id = ?",
-                  [viber_id]
-                );
+              }
+          }
+          return res.status(200).json({ status: "ok" });
+        }
+
+        // Если пользователь не найден, продолжаем с регистрацией
+        const [tempRegistrations] = await db.query(
+          "SELECT * FROM temp_registrations WHERE viber_id = ?",
+          [viber_id]
+        );
+        console.log('Temp registration lookup:', tempRegistrations);
+
+        if (tempRegistrations.length === 0) {
+          // Простая заглушка для тестирования
+          if (message_text === '123') {
+            console.log('Test phone number detected');
+            // Сохраняем номер телефона во временную таблицу
+            await db.query(
+              "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+              [viber_id, '380505699852'] // Сохраняем реальный номер в базу
+            );
+
+            await sendViberMessage(
+              viber_id,
+              "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+              getRegistrationButtons()
+            );
+            return res.status(200).json({ status: "ok" });
+          }
+          
+          // Проверка реального номера телефона
+          const phoneNumber = message_text.trim();
+          console.log('Original phone number:', phoneNumber);
+          
+          // Нормализуем номер телефона (оставляем только цифры)
+          const normalizedPhone = phoneNumber.replace(/\D/g, '');
+          console.log('Normalized phone number:', normalizedPhone);
+          
+          // Проверяем формат номера (12 цифр, начинается с 380)
+          const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+          console.log('Is valid format:', isValidFormat);
+          
+          if (isValidFormat) {
+            console.log('Phone number format is valid');
+            
+            // Ищем пользователя по номеру телефона
+            const [usersByPhone] = await db.query(
+              "SELECT * FROM users WHERE phone = ?",
+              [normalizedPhone]
+            );
+            console.log('Users found by phone:', usersByPhone);
+
+            if (usersByPhone.length > 0) {
+              const user = usersByPhone[0];
+              console.log('Found user:', user);
+              
+              if (user.viber_id) {
+                console.log('User already has viber_id:', user.viber_id);
                 await sendViberMessage(
                   viber_id,
-                  "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+                  "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса.",
+                  getRegistrationButtons()
                 );
               } else {
+                console.log('Saving to temp_registrations');
+                // Сохраняем номер телефона во временную таблицу
+                await db.query(
+                  "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                  [viber_id, normalizedPhone]
+                );
+
                 await sendViberMessage(
                   viber_id,
-                  "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка.\n\nДля отмены регистрации отправьте 'отмена'"
+                  "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+                  getRegistrationButtons()
                 );
               }
+            } else {
+              console.log('No user found with this phone number');
+              await sendViberMessage(
+                viber_id,
+                "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление.",
+                getRegistrationButtons()
+              );
             }
+          } else {
+            console.log('Invalid phone number format');
+            await sendViberMessage(
+              viber_id,
+              "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования",
+              getRegistrationButtons()
+            );
+          }
         }
       } else if (event === "conversation_started") {
         // Обработка начала диалога
@@ -648,7 +641,8 @@ export default function viberRoutes(db) {
 
         await sendViberMessage(
           viber_id, 
-          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
+          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX.",
+          getRegistrationButtons()
         );
       } else if (event === "subscribed") {
         // Обработка подписки
@@ -662,7 +656,8 @@ export default function viberRoutes(db) {
 
         await sendViberMessage(
           viber_id, 
-          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
+          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX.",
+          getRegistrationButtons()
         );
       } else if (event === "delivered" || event === "seen") {
         // Обработка событий доставки и прочтения
