@@ -7,6 +7,25 @@ const VIBER_AUTH_TOKEN = process.env.VIBER_AUTH_TOKEN || '507a9cdad4e7e728-44afb
 export default function viberRoutes(db) {
   const router = express.Router();
 
+  // Функция для получения информации о пользователе Viber
+  async function getViberUserDetails(viber_id) {
+    try {
+      console.log('Getting user details for:', viber_id);
+      const response = await axios.post("https://chatapi.viber.com/pa/get_user_details", {
+        id: viber_id
+      }, {
+        headers: {
+          "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
+        }
+      });
+      console.log('Viber user details:', response.data);
+      return response.data;
+    } catch (err) {
+      console.error("Error getting Viber user details:", err.response?.data || err.message);
+      return null;
+    }
+  }
+
   // Функция для отправки сообщений в Viber
   async function sendViberMessage(viber_id, message) {
     try {
@@ -299,19 +318,26 @@ export default function viberRoutes(db) {
               );
 
               if (usersByPhone.length > 0) {
-                // Обновляем viber_id для пользователя
+                // Получаем информацию о пользователе Viber
+                const viberUser = await getViberUserDetails(viber_id);
+                const userDetails = viberUser ? JSON.stringify(viberUser) : null;
+
+                // Обновляем viber_id и информацию о пользователе
                 await db.query(
-                  "UPDATE users SET viber_id = ? WHERE id = ?",
-                  [viber_id, usersByPhone[0].id]
+                  "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
+                  [viber_id, userDetails, usersByPhone[0].id]
                 );
-                await sendViberMessage(
-                  viber_id,
-                  `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-                );
+
+                // Логируем регистрацию с деталями
                 await db.query(
                   `INSERT INTO bot_actions (viber_id, action_type, action_data) 
                    VALUES (?, ?, ?)`,
-                  [viber_id, 'registration', `Регистрация пользователя с участком ${usersByPhone[0].plot_number}`]
+                  [viber_id, 'registration', `Регистрация пользователя с участком ${usersByPhone[0].plot_number}. Viber details: ${userDetails}`]
+                );
+
+                await sendViberMessage(
+                  viber_id,
+                  `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
                 );
               } else {
                 await sendViberMessage(
@@ -334,6 +360,9 @@ export default function viberRoutes(db) {
       } else if (event === "conversation_started") {
         // Обработка начала диалога
         console.log('Conversation started with:', sender);
+        const viberUser = await getViberUserDetails(sender.id);
+        console.log('New user details:', viberUser);
+
         await sendViberMessage(
           sender.id, 
           "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX.\n\n" +
@@ -342,6 +371,9 @@ export default function viberRoutes(db) {
       } else if (event === "subscribed") {
         // Обработка подписки
         console.log('User subscribed:', sender);
+        const viberUser = await getViberUserDetails(sender.id);
+        console.log('New subscriber details:', viberUser);
+
         await sendViberMessage(
           sender.id, 
           "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX.\n\n" +
