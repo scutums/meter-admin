@@ -528,6 +528,11 @@ app.get("/api/auth-user-info", async (req, res) => {
 
 app.use("/api/viber", viberRoutes(db));
 
+// Маршрут для страницы действий бота
+app.get('/bot-actions', (req, res) => {
+    res.sendFile(path.join(__dirname, 'bot-actions.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
 });

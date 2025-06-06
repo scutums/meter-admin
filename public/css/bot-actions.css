@@ -1,0 +1,45 @@
+.action-type {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    display: inline-block;
+    min-width: 100px;
+    text-align: center;
+}
+
+.action-type.message { 
+    background-color: #e3f2fd; 
+    color: #0d47a1;
+}
+
+.action-type.info_request { 
+    background-color: #e8f5e9; 
+    color: #1b5e20;
+}
+
+.action-type.unregistered_user { 
+    background-color: #fff3e0; 
+    color: #e65100;
+}
+
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter {
+    margin-bottom: 1rem;
+}
+
+.dataTables_wrapper .dataTables_info {
+    padding-top: 1rem;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.table td {
+    vertical-align: middle;
+} 

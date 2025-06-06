@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 
 const VIBER_AUTH_TOKEN='507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366';
+
 export default function viberRoutes(db) {
   const router = express.Router();
 
@@ -15,12 +16,24 @@ export default function viberRoutes(db) {
         const viber_id = sender.id;
         const message_text = message.text;
 
+        // Логируем действие пользователя
+        await db.query(
+          `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+           VALUES (?, ?, ?)`,
+          [viber_id, 'message', message_text]
+        );
+
         // Проверяем, существует ли пользователь
         const [users] = await db.query("SELECT * FROM users WHERE viber_id = ?", [viber_id]);
         
         if (users.length === 0) {
           // Если пользователь не найден, отправляем сообщение о регистрации
           await sendViberMessage(viber_id, "Для начала работы с ботом, пожалуйста, зарегистрируйтесь на сайте.");
+          await db.query(
+            `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+             VALUES (?, ?, ?)`,
+            [viber_id, 'unregistered_user', 'Попытка использования бота без регистрации']
+          );
           return res.status(200).json({ status: "ok" });
         }
 
@@ -44,12 +57,42 @@ export default function viberRoutes(db) {
           const message = `Информация по участку ${user.plot_number}:\nДолг: ${debt ?? 'нет данных'}\nТекущий тариф: ${tariff}`;
           
           await sendViberMessage(viber_id, message);
+          await db.query(
+            `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+             VALUES (?, ?, ?)`,
+            [viber_id, 'info_request', `Запрос информации по участку ${user.plot_number}`]
+          );
         }
       }
 
       res.status(200).json({ status: "ok" });
     } catch (err) {
       console.error("Error processing webhook:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Новый маршрут для получения действий бота
+  router.get("/bot-actions", async (req, res) => {
+    try {
+      const [actions] = await db.query(`
+        SELECT 
+          ba.id,
+          ba.viber_id,
+          u.plot_number,
+          u.full_name,
+          ba.action_type,
+          ba.action_data,
+          ba.created_at
+        FROM bot_actions ba
+        LEFT JOIN users u ON ba.viber_id = u.viber_id
+        ORDER BY ba.created_at DESC
+        LIMIT 100
+      `);
+
+      res.json(actions);
+    } catch (err) {
+      console.error("Error getting bot actions:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
