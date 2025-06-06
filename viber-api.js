@@ -1,7 +1,8 @@
 import express from "express";
 import axios from "axios";
 
-const VIBER_AUTH_TOKEN='507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366';
+// Получаем токен из переменных окружения
+const VIBER_AUTH_TOKEN = process.env.VIBER_AUTH_TOKEN || '507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366';
 
 export default function viberRoutes(db) {
   const router = express.Router();
@@ -10,6 +11,8 @@ export default function viberRoutes(db) {
   async function sendViberMessage(viber_id, message) {
     try {
       console.log(`Sending message to ${viber_id}: ${message}`);
+      console.log('Using Viber token:', VIBER_AUTH_TOKEN);
+      
       const response = await axios.post("https://chatapi.viber.com/pa/send_message", {
         receiver: viber_id,
         type: "text",
@@ -72,7 +75,11 @@ export default function viberRoutes(db) {
         
         if (users.length === 0) {
           // Если пользователь не найден, отправляем сообщение о регистрации
-          await sendViberMessage(viber_id, "Для начала работы с ботом, пожалуйста, отправьте номер вашего участка.");
+          await sendViberMessage(
+            viber_id, 
+            "Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX.\n\n" +
+            "Если ваш номер телефона не найден в базе данных, обратитесь в правление для внесения или актуализации данных."
+          );
           await db.query(
             `INSERT INTO bot_actions (viber_id, action_type, action_data) 
              VALUES (?, ?, ?)`,
@@ -282,61 +289,64 @@ export default function viberRoutes(db) {
             break;
 
           default:
-            // Проверяем, не является ли сообщение числом для настройки напоминания
-            const reminderDay = parseInt(message_text);
-            if (!isNaN(reminderDay) && reminderDay >= 1 && reminderDay <= 28) {
-              await db.query(
-                "UPDATE users SET reminder_day = ? WHERE id = ?",
-                [reminderDay, user.id]
+            // Проверяем, не является ли сообщение номером телефона
+            const phoneNumber = message_text.replace(/\s+/g, '');
+            if (phoneNumber.match(/^\+380\d{9}$/)) {
+              // Ищем пользователя по номеру телефона
+              const [usersByPhone] = await db.query(
+                "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
+                [phoneNumber]
               );
-              await sendViberMessage(
-                viber_id,
-                `Напоминание установлено на ${reminderDay} число каждого месяца.`
-              );
-              await db.query(
-                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                 VALUES (?, ?, ?)`,
-                [viber_id, 'reminder_set', `Установка дня напоминания на ${reminderDay}`]
-              );
-            } else {
-              // Проверяем, не является ли сообщение номером участка
-              const plotNumber = parseInt(message_text);
-              if (!isNaN(plotNumber)) {
-                // Ищем пользователя по номеру участка
-                const [usersByPlot] = await db.query(
-                  "SELECT * FROM users WHERE plot_number = ? AND viber_id IS NULL",
-                  [plotNumber]
-                );
 
-                if (usersByPlot.length > 0) {
-                  // Обновляем viber_id для пользователя
-                  await db.query(
-                    "UPDATE users SET viber_id = ? WHERE id = ?",
-                    [viber_id, usersByPlot[0].id]
-                  );
-                  await sendViberMessage(
-                    viber_id,
-                    `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-                  );
-                  await db.query(
-                    `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                     VALUES (?, ?, ?)`,
-                    [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber}`]
-                  );
-                } else {
-                  await sendViberMessage(
-                    viber_id,
-                    "Участок не найден или уже привязан к другому пользователю Viber. Пожалуйста, проверьте номер участка."
-                  );
-                }
+              if (usersByPhone.length > 0) {
+                // Обновляем viber_id для пользователя
+                await db.query(
+                  "UPDATE users SET viber_id = ? WHERE id = ?",
+                  [viber_id, usersByPhone[0].id]
+                );
+                await sendViberMessage(
+                  viber_id,
+                  `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
+                );
+                await db.query(
+                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                   VALUES (?, ?, ?)`,
+                  [viber_id, 'registration', `Регистрация пользователя с участком ${usersByPhone[0].plot_number}`]
+                );
               } else {
                 await sendViberMessage(
                   viber_id,
-                  "Неизвестная команда. Отправьте 'помощь' для просмотра доступных команд."
+                  "Ваш номер телефона не найден в базе данных или уже привязан к другому пользователю Viber.\n\nПожалуйста, обратитесь в правление для внесения или актуализации данных."
+                );
+                await db.query(
+                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                   VALUES (?, ?, ?)`,
+                  [viber_id, 'registration_failed', `Попытка регистрации с номером ${phoneNumber}`]
                 );
               }
+            } else {
+              await sendViberMessage(
+                viber_id,
+                "Неизвестная команда. Отправьте 'помощь' для просмотра доступных команд."
+              );
             }
         }
+      } else if (event === "conversation_started") {
+        // Обработка начала диалога
+        console.log('Conversation started with:', sender);
+        await sendViberMessage(
+          sender.id, 
+          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX.\n\n" +
+          "Если ваш номер телефона не найден в базе данных, обратитесь в правление для внесения или актуализации данных."
+        );
+      } else if (event === "subscribed") {
+        // Обработка подписки
+        console.log('User subscribed:', sender);
+        await sendViberMessage(
+          sender.id, 
+          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX.\n\n" +
+          "Если ваш номер телефона не найден в базе данных, обратитесь в правление для внесения или актуализации данных."
+        );
       } else {
         console.log('Received non-message event:', event);
       }
@@ -488,6 +498,32 @@ export default function viberRoutes(db) {
     } catch (err) {
       console.error("Error checking bot status:", err.response?.data || err.message);
       res.status(500).json({ error: "Failed to get bot status" });
+    }
+  });
+
+  // Маршрут для установки вебхука
+  router.post("/set-webhook", async (req, res) => {
+    try {
+      const { webhook_url } = req.body;
+      if (!webhook_url) {
+        return res.status(400).json({ error: "webhook_url is required" });
+      }
+
+      console.log('Setting webhook to:', webhook_url);
+      const response = await axios.post("https://chatapi.viber.com/pa/set_webhook", {
+        url: webhook_url,
+        event_types: ["subscribed", "unsubscribed", "conversation_started", "message"]
+      }, {
+        headers: {
+          "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
+        }
+      });
+
+      console.log('Webhook set response:', response.data);
+      res.json(response.data);
+    } catch (err) {
+      console.error("Error setting webhook:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to set webhook" });
     }
   });
 
