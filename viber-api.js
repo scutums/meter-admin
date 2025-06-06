@@ -136,10 +136,65 @@ export default function viberRoutes(db) {
               return res.status(200).json({ status: "ok" });
             }
             
-            await sendViberMessage(
-              viber_id,
-              "Для начала работы с ботом, пожалуйста, отправьте номер 123"
-            );
+            // Проверка реального номера телефона
+            const phoneNumber = message_text.trim();
+            console.log('Original phone number:', phoneNumber);
+            
+            // Нормализуем номер телефона (оставляем только цифры)
+            const normalizedPhone = phoneNumber.replace(/\D/g, '');
+            console.log('Normalized phone number:', normalizedPhone);
+            
+            // Проверяем формат номера (12 цифр, начинается с 380)
+            const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+            console.log('Is valid format:', isValidFormat);
+            
+            if (isValidFormat) {
+              console.log('Phone number format is valid');
+              
+              // Ищем пользователя по номеру телефона
+              const [usersByPhone] = await db.query(
+                "SELECT * FROM users WHERE phone = ?",
+                [normalizedPhone]
+              );
+              console.log('Users found by phone:', usersByPhone);
+
+              if (usersByPhone.length > 0) {
+                const user = usersByPhone[0];
+                console.log('Found user:', user);
+                
+                if (user.viber_id) {
+                  console.log('User already has viber_id:', user.viber_id);
+                  await sendViberMessage(
+                    viber_id,
+                    "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
+                  );
+                } else {
+                  console.log('Saving to temp_registrations');
+                  // Сохраняем номер телефона во временную таблицу
+                  await db.query(
+                    "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                    [viber_id, normalizedPhone]
+                  );
+
+                  await sendViberMessage(
+                    viber_id,
+                    "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
+                  );
+                }
+              } else {
+                console.log('No user found with this phone number');
+                await sendViberMessage(
+                  viber_id,
+                  "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                );
+              }
+            } else {
+              console.log('Invalid phone number format');
+              await sendViberMessage(
+                viber_id,
+                "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+              );
+            }
             return res.status(200).json({ status: "ok" });
           } else {
             // Второй шаг: проверяем номер участка
@@ -428,12 +483,8 @@ export default function viberRoutes(db) {
             );
 
             if (tempRegistrations.length === 0) {
-              // Первый шаг: проверяем номер телефона
-              const phoneNumber = message_text.trim();
-              console.log('Original phone number:', phoneNumber);
-              
               // Простая заглушка для тестирования
-              if (phoneNumber === '123') {
+              if (message_text === '123') {
                 console.log('Test phone number detected');
                 // Сохраняем номер телефона во временную таблицу
                 await db.query(
@@ -447,11 +498,66 @@ export default function viberRoutes(db) {
                 );
                 return res.status(200).json({ status: "ok" });
               }
+
+              // Проверка реального номера телефона
+              const phoneNumber = message_text.trim();
+              console.log('Original phone number:', phoneNumber);
               
-              await sendViberMessage(
-                viber_id,
-                "Для начала работы с ботом, пожалуйста, отправьте номер 123"
-              );
+              // Нормализуем номер телефона (оставляем только цифры)
+              const normalizedPhone = phoneNumber.replace(/\D/g, '');
+              console.log('Normalized phone number:', normalizedPhone);
+              
+              // Проверяем формат номера (12 цифр, начинается с 380)
+              const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+              console.log('Is valid format:', isValidFormat);
+              
+              if (isValidFormat) {
+                console.log('Phone number format is valid');
+                
+                // Ищем пользователя по номеру телефона
+                const [usersByPhone] = await db.query(
+                  "SELECT * FROM users WHERE phone = ?",
+                  [normalizedPhone]
+                );
+                console.log('Users found by phone:', usersByPhone);
+
+                if (usersByPhone.length > 0) {
+                  const user = usersByPhone[0];
+                  console.log('Found user:', user);
+                  
+                  if (user.viber_id) {
+                    console.log('User already has viber_id:', user.viber_id);
+                    await sendViberMessage(
+                      viber_id,
+                      "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
+                    );
+                  } else {
+                    console.log('Saving to temp_registrations');
+                    // Сохраняем номер телефона во временную таблицу
+                    await db.query(
+                      "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                      [viber_id, normalizedPhone]
+                    );
+
+                    await sendViberMessage(
+                      viber_id,
+                      "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
+                    );
+                  }
+                } else {
+                  console.log('No user found with this phone number');
+                  await sendViberMessage(
+                    viber_id,
+                    "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                  );
+                }
+              } else {
+                console.log('Invalid phone number format');
+                await sendViberMessage(
+                  viber_id,
+                  "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+                );
+              }
               return res.status(200).json({ status: "ok" });
             } else {
               // Второй шаг: проверяем номер участка
