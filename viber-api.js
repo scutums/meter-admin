@@ -402,7 +402,7 @@ export default function viberRoutes(db) {
                   );
                   return res.status(200).json({ status: "ok" });
                 }
-
+                
                 // Проверка реального номера телефона
                 const phoneNumber = message_text.trim();
                 console.log('Original phone number:', phoneNumber);
@@ -470,10 +470,12 @@ export default function viberRoutes(db) {
                 // Второй шаг: проверяем номер участка
                 const plotNumber = message_text.trim();
                 console.log('Checking plot number:', plotNumber);
+                console.log('Temp registration:', tempRegistrations[0]);
                 
                 if (plotNumber.match(/^\d+$/)) {
                   // Получаем сохраненный номер телефона
                   const tempReg = tempRegistrations[0];
+                  console.log('Using phone from temp registration:', tempReg.phone);
                   
                   // Проверяем, что участок принадлежит этому пользователю
                   const [usersByPlot] = await db.query(
@@ -512,6 +514,7 @@ export default function viberRoutes(db) {
                       getCommandButtons()
                     );
                   } else {
+                    console.log('No matching plot found for phone:', tempReg.phone);
                     await sendViberMessage(
                       viber_id,
                       "Участок с таким номером не найден или не привязан к вашему номеру телефона.\n\nПожалуйста, проверьте номер и попробуйте снова.\n\nЕсли вы уверены, что номер правильный, обратитесь в правление.",
@@ -529,6 +532,7 @@ export default function viberRoutes(db) {
                     "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
                   );
                 } else {
+                  console.log('Invalid plot number format:', plotNumber);
                   await sendViberMessage(
                     viber_id,
                     "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка.",
