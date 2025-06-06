@@ -86,8 +86,14 @@ export default function viberRoutes(db) {
       console.log('Received webhook:', JSON.stringify(req.body, null, 2));
       const { event, sender, message } = req.body;
 
+      // Проверяем наличие sender
+      if (!sender || !sender.id) {
+        console.log('Invalid sender data:', sender);
+        return res.status(200).json({ status: "ok" });
+      }
+
       // Проверяем, что это сообщение от пользователя
-      if (event === "message" && message.type === "text") {
+      if (event === "message" && message && message.type === "text") {
         const viber_id = sender.id;
         const message_text = message.text.toLowerCase();
 
@@ -496,6 +502,10 @@ export default function viberRoutes(db) {
         }
       } else if (event === "conversation_started") {
         // Обработка начала диалога
+        if (!sender || !sender.id) {
+          console.log('Invalid sender data in conversation_started:', sender);
+          return res.status(200).json({ status: "ok" });
+        }
         console.log('Conversation started with:', sender);
         const viberUser = await getViberUserDetails(sender.id);
         console.log('New user details:', viberUser);
@@ -506,6 +516,10 @@ export default function viberRoutes(db) {
         );
       } else if (event === "subscribed") {
         // Обработка подписки
+        if (!sender || !sender.id) {
+          console.log('Invalid sender data in subscribed:', sender);
+          return res.status(200).json({ status: "ok" });
+        }
         console.log('User subscribed:', sender);
         const viberUser = await getViberUserDetails(sender.id);
         console.log('New subscriber details:', viberUser);
