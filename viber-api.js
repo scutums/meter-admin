@@ -363,21 +363,28 @@ export default function viberRoutes(db) {
             if (tempRegistrations.length === 0) {
               // Первый шаг: проверяем номер телефона
               const phoneNumber = message_text.trim();
-              console.log('Checking phone number:', phoneNumber);
+              console.log('Original phone number:', phoneNumber);
               
-              if (phoneNumber.match(/^\+380\d{9}$/)) {
+              // Нормализуем номер телефона (убираем все кроме цифр и +)
+              const normalizedPhone = phoneNumber.replace(/[^\d+]/g, '');
+              console.log('Normalized phone number:', normalizedPhone);
+              
+              // Проверяем формат номера
+              if (normalizedPhone.match(/^\+380\d{9}$/)) {
+                console.log('Phone number format is valid');
                 // Ищем пользователя по номеру телефона
                 const [usersByPhone] = await db.query(
                   "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
-                  [phoneNumber]
+                  [normalizedPhone]
                 );
                 console.log('Users found by phone:', usersByPhone);
 
                 if (usersByPhone.length > 0) {
+                  console.log('Found user by phone, saving to temp_registrations');
                   // Сохраняем номер телефона во временную таблицу
                   await db.query(
                     "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                    [viber_id, phoneNumber]
+                    [viber_id, normalizedPhone]
                   );
 
                   await sendViberMessage(
@@ -388,8 +395,9 @@ export default function viberRoutes(db) {
                   // Проверяем, может номер уже привязан
                   const [existingUser] = await db.query(
                     "SELECT * FROM users WHERE phone = ? AND viber_id IS NOT NULL",
-                    [phoneNumber]
+                    [normalizedPhone]
                   );
+                  console.log('Existing user with this phone:', existingUser);
 
                   if (existingUser.length > 0) {
                     await sendViberMessage(
@@ -404,6 +412,7 @@ export default function viberRoutes(db) {
                   }
                 }
               } else {
+                console.log('Invalid phone number format');
                 await sendViberMessage(
                   viber_id,
                   "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате +380XXXXXXXXX"
