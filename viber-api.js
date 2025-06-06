@@ -389,65 +389,40 @@ export default function viberRoutes(db) {
                 
                 // Ищем пользователя по номеру телефона (точное совпадение)
                 const [usersByPhone] = await db.query(
-                  "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
+                  "SELECT * FROM users WHERE phone = ?",
                   [normalizedPhone]
                 );
                 console.log('Users found by phone:', usersByPhone);
-                console.log('SQL query:', "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL");
-                console.log('SQL params:', [normalizedPhone]);
 
                 if (usersByPhone.length > 0) {
-                  console.log('Found user by phone, saving to temp_registrations');
-                  // Сохраняем номер телефона во временную таблицу
-                  await db.query(
-                    "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                    [viber_id, normalizedPhone]
-                  );
-
-                  await sendViberMessage(
-                    viber_id,
-                    "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
-                  );
-                } else {
-                  // Проверяем, может номер уже привязан
-                  const [existingUser] = await db.query(
-                    "SELECT * FROM users WHERE phone = ? AND viber_id IS NOT NULL",
-                    [normalizedPhone]
-                  );
-                  console.log('Existing user with this phone:', existingUser);
-
-                  if (existingUser.length > 0) {
+                  const user = usersByPhone[0];
+                  console.log('Found user:', user);
+                  
+                  if (user.viber_id) {
+                    console.log('User already has viber_id:', user.viber_id);
                     await sendViberMessage(
                       viber_id,
                       "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
                     );
                   } else {
-                    // Проверяем номер без учета viber_id
-                    const [anyUser] = await db.query(
-                      "SELECT * FROM users WHERE phone = ?",
-                      [normalizedPhone]
+                    console.log('Saving to temp_registrations');
+                    // Сохраняем номер телефона во временную таблицу
+                    await db.query(
+                      "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                      [viber_id, normalizedPhone]
                     );
-                    console.log('Any user with this phone:', anyUser);
-                    
-                    if (anyUser.length > 0) {
-                      await sendViberMessage(
-                        viber_id,
-                        "Номер телефона найден, но не может быть привязан. Пожалуйста, обратитесь в правление."
-                      );
-                    } else {
-                      // Проверяем номер с LIKE для отладки
-                      const [similarPhones] = await db.query(
-                        "SELECT * FROM users WHERE phone LIKE ?",
-                        [`%${normalizedPhone}%`]
-                      );
-                      console.log('Similar phones found:', similarPhones);
-                      
-                      await sendViberMessage(
-                        viber_id,
-                        "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
-                      );
-                    }
+
+                    await sendViberMessage(
+                      viber_id,
+                      "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
+                    );
                   }
+                } else {
+                  console.log('No user found with this phone number');
+                  await sendViberMessage(
+                    viber_id,
+                    "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                  );
                 }
               } else {
                 console.log('Invalid phone number format');
