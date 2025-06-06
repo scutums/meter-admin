@@ -9,7 +9,8 @@ export default function viberRoutes(db) {
   // Функция для отправки сообщений в Viber
   async function sendViberMessage(viber_id, message) {
     try {
-      await axios.post("https://chatapi.viber.com/pa/send_message", {
+      console.log(`Sending message to ${viber_id}: ${message}`);
+      const response = await axios.post("https://chatapi.viber.com/pa/send_message", {
         receiver: viber_id,
         type: "text",
         text: message
@@ -18,8 +19,9 @@ export default function viberRoutes(db) {
           "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
         }
       });
+      console.log('Viber API response:', response.data);
     } catch (err) {
-      console.error("Error sending Viber message:", err);
+      console.error("Error sending Viber message:", err.response?.data || err.message);
     }
   }
 
@@ -47,12 +49,15 @@ export default function viberRoutes(db) {
   // Webhook для Viber
   router.post("/webhook", async (req, res) => {
     try {
+      console.log('Received webhook:', JSON.stringify(req.body, null, 2));
       const { event, sender, message } = req.body;
 
       // Проверяем, что это сообщение от пользователя
       if (event === "message" && message.type === "text") {
         const viber_id = sender.id;
         const message_text = message.text.toLowerCase();
+
+        console.log(`Processing message from ${viber_id}: ${message_text}`);
 
         // Логируем действие пользователя
         await db.query(
@@ -63,6 +68,7 @@ export default function viberRoutes(db) {
 
         // Проверяем, существует ли пользователь
         const [users] = await db.query("SELECT * FROM users WHERE viber_id = ?", [viber_id]);
+        console.log(`User lookup result:`, users);
         
         if (users.length === 0) {
           // Если пользователь не найден, отправляем сообщение о регистрации
@@ -331,6 +337,8 @@ export default function viberRoutes(db) {
               }
             }
         }
+      } else {
+        console.log('Received non-message event:', event);
       }
 
       res.status(200).json({ status: "ok" });
@@ -465,6 +473,21 @@ export default function viberRoutes(db) {
       });
     } catch (err) {
       res.status(500).json({ error: "Ошибка сервера", details: err.message });
+    }
+  });
+
+  // Добавляем маршрут для проверки статуса бота
+  router.get("/status", async (req, res) => {
+    try {
+      const response = await axios.get("https://chatapi.viber.com/pa/get_account_info", {
+        headers: {
+          "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
+        }
+      });
+      res.json(response.data);
+    } catch (err) {
+      console.error("Error checking bot status:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to get bot status" });
     }
   });
 

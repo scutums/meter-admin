@@ -44,6 +44,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Добавляем маршруты Viber
+app.use("/viber", viberRoutes(db));
+
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
@@ -525,8 +528,6 @@ app.get("/api/auth-user-info", async (req, res) => {
     res.status(401).json({ message: "Ошибка авторизации" });
   }
 });
-
-app.use("/api/viber", viberRoutes(db));
 
 // Маршрут для страницы действий бота
 app.get('/bot-actions', (req, res) => {
