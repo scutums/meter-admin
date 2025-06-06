@@ -93,7 +93,7 @@ export default function viberRoutes(db) {
         console.log('No viber_id found in webhook data');
         return res.status(200).json({ status: "ok" });
       }
-
+//ол
       // Проверяем, что это сообщение от пользователя
       if (event === "message" && message && message.type === "text") {
         const message_text = message.text.toLowerCase();
