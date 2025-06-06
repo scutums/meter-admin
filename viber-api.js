@@ -376,6 +376,22 @@ export default function viberRoutes(db) {
               const normalizedPhone = phoneNumber.replace(/\D/g, '');
               console.log('Normalized phone number:', normalizedPhone);
               
+              // Заглушка для тестового номера
+              if (normalizedPhone === '380505699852') {
+                console.log('Test phone number detected');
+                // Сохраняем номер телефона во временную таблицу
+                await db.query(
+                  "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                  [viber_id, normalizedPhone]
+                );
+
+                await sendViberMessage(
+                  viber_id,
+                  "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры)."
+                );
+                return res.status(200).json({ status: "ok" });
+              }
+              
               // Проверяем формат номера (12 цифр, начинается с 380)
               const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
               console.log('Is valid format:', isValidFormat);
