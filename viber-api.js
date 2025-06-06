@@ -18,7 +18,19 @@ export default function viberRoutes(db) {
           "X-Viber-Auth-Token": VIBER_AUTH_TOKEN
         }
       });
-      console.log('Viber user details:', response.data);
+      console.log('Full Viber API response:', JSON.stringify(response.data, null, 2));
+      
+      // Проверяем наличие номера телефона
+      if (response.data && response.data.user) {
+        console.log('User details from Viber:', {
+          id: response.data.user.id,
+          name: response.data.user.name,
+          phone_number: response.data.user.phone_number,
+          language: response.data.user.language,
+          country: response.data.user.country
+        });
+      }
+      
       return response.data;
     } catch (err) {
       console.error("Error getting Viber user details:", err.response?.data || err.message);
