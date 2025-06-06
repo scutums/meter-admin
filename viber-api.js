@@ -84,17 +84,18 @@ export default function viberRoutes(db) {
   router.post("/webhook", async (req, res) => {
     try {
       console.log('Received webhook:', JSON.stringify(req.body, null, 2));
-      const { event, sender, message } = req.body;
+      const { event, sender, message, user_id } = req.body;
 
-      // Проверяем наличие sender
-      if (!sender || !sender.id) {
-        console.log('Invalid sender data:', sender);
+      // Для событий delivered и seen используем user_id вместо sender.id
+      const viber_id = sender?.id || user_id;
+      
+      if (!viber_id) {
+        console.log('No viber_id found in webhook data');
         return res.status(200).json({ status: "ok" });
       }
 
       // Проверяем, что это сообщение от пользователя
       if (event === "message" && message && message.type === "text") {
-        const viber_id = sender.id;
         const message_text = message.text.toLowerCase();
 
         console.log(`Processing message from ${viber_id}: ${message_text}`);
@@ -382,12 +383,18 @@ export default function viberRoutes(db) {
               if (isValidFormat) {
                 console.log('Phone number format is valid');
                 
+                // Проверяем все номера в базе для отладки
+                const [allPhones] = await db.query("SELECT phone FROM users");
+                console.log('All phones in DB:', allPhones.map(u => u.phone));
+                
                 // Ищем пользователя по номеру телефона (точное совпадение)
                 const [usersByPhone] = await db.query(
                   "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
                   [normalizedPhone]
                 );
                 console.log('Users found by phone:', usersByPhone);
+                console.log('SQL query:', "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL");
+                console.log('SQL params:', [normalizedPhone]);
 
                 if (usersByPhone.length > 0) {
                   console.log('Found user by phone, saving to temp_registrations');
@@ -428,6 +435,13 @@ export default function viberRoutes(db) {
                         "Номер телефона найден, но не может быть привязан. Пожалуйста, обратитесь в правление."
                       );
                     } else {
+                      // Проверяем номер с LIKE для отладки
+                      const [similarPhones] = await db.query(
+                        "SELECT * FROM users WHERE phone LIKE ?",
+                        [`%${normalizedPhone}%`]
+                      );
+                      console.log('Similar phones found:', similarPhones);
+                      
                       await sendViberMessage(
                         viber_id,
                         "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
@@ -502,32 +516,36 @@ export default function viberRoutes(db) {
         }
       } else if (event === "conversation_started") {
         // Обработка начала диалога
-        if (!sender || !sender.id) {
-          console.log('Invalid sender data in conversation_started:', sender);
+        if (!sender) {
+          console.log('No sender data in conversation_started');
           return res.status(200).json({ status: "ok" });
         }
         console.log('Conversation started with:', sender);
-        const viberUser = await getViberUserDetails(sender.id);
+        const viberUser = await getViberUserDetails(viber_id);
         console.log('New user details:', viberUser);
 
         await sendViberMessage(
-          sender.id, 
+          viber_id, 
           "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
         );
       } else if (event === "subscribed") {
         // Обработка подписки
-        if (!sender || !sender.id) {
-          console.log('Invalid sender data in subscribed:', sender);
+        if (!sender) {
+          console.log('No sender data in subscribed');
           return res.status(200).json({ status: "ok" });
         }
         console.log('User subscribed:', sender);
-        const viberUser = await getViberUserDetails(sender.id);
+        const viberUser = await getViberUserDetails(viber_id);
         console.log('New subscriber details:', viberUser);
 
         await sendViberMessage(
-          sender.id, 
+          viber_id, 
           "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
         );
+      } else if (event === "delivered" || event === "seen") {
+        // Обработка событий доставки и прочтения
+        console.log(`Message ${event} by user ${viber_id}`);
+        // Можно добавить логирование этих событий, если нужно
       } else {
         console.log('Received non-message event:', event);
       }
