@@ -1,7 +1,7 @@
 $(document).ready(function() {
     const table = $('#actionsTable').DataTable({
         ajax: {
-            url: '/api/viber/bot-actions',
+            url: '/viber/bot-actions',
             dataSrc: ''
         },
         columns: [
