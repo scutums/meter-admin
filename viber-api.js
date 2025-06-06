@@ -1,7 +1,75 @@
 import express from "express";
+import axios from "axios";
 
+const VIBER_AUTH_TOKEN='507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366';
 export default function viberRoutes(db) {
   const router = express.Router();
+
+  // Webhook для Viber
+  router.post("/webhook", async (req, res) => {
+    try {
+      const { event, sender, message } = req.body;
+
+      // Проверяем, что это сообщение от пользователя
+      if (event === "message" && message.type === "text") {
+        const viber_id = sender.id;
+        const message_text = message.text;
+
+        // Проверяем, существует ли пользователь
+        const [users] = await db.query("SELECT * FROM users WHERE viber_id = ?", [viber_id]);
+        
+        if (users.length === 0) {
+          // Если пользователь не найден, отправляем сообщение о регистрации
+          await sendViberMessage(viber_id, "Для начала работы с ботом, пожалуйста, зарегистрируйтесь на сайте.");
+          return res.status(200).json({ status: "ok" });
+        }
+
+        // Обработка команд
+        if (message_text.toLowerCase() === "инфо") {
+          // Получаем информацию о пользователе
+          const user = users[0];
+          const [[tariffRow]] = await db.query(
+            `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
+          );
+          const tariff = tariffRow?.value || 4.75;
+
+          const [[lastPayment]] = await db.query(
+            `SELECT payment_date, paid_reading, debt, 
+              (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
+             FROM payments WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1`,
+            [user.id]
+          );
+
+          const debt = lastPayment ? lastPayment.debt : null;
+          const message = `Информация по участку ${user.plot_number}:\nДолг: ${debt ?? 'нет данных'}\nТекущий тариф: ${tariff}`;
+          
+          await sendViberMessage(viber_id, message);
+        }
+      }
+
+      res.status(200).json({ status: "ok" });
+    } catch (err) {
+      console.error("Error processing webhook:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Функция для отправки сообщений в Viber
+  async function sendViberMessage(viber_id, message) {
+    try {
+      await axios.post("https://chatapi.viber.com/pa/send_message", {
+        receiver: viber_id,
+        type: "text",
+        text: message
+      }, {
+        headers: {
+          "X-Viber-Auth-Token": process.env.VIBER_AUTH_TOKEN
+        }
+      });
+    } catch (err) {
+      console.error("Error sending Viber message:", err);
+    }
+  }
 
   router.post("/user-info", async (req, res) => {
     const { viber_id } = req.body;
