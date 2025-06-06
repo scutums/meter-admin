@@ -105,66 +105,17 @@ export default function viberRoutes(db) {
         console.log(`User lookup result:`, users);
         
         if (users.length === 0) {
-          // Получаем информацию о пользователе Viber
-          const viberUser = await getViberUserDetails(viber_id);
-          console.log('Viber user details:', viberUser);
-
-          if (viberUser && viberUser.phone_number) {
-            // Ищем пользователя по номеру телефона
-            const [usersByPhone] = await db.query(
-              "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
-              [viberUser.phone_number]
-            );
-            console.log('Users found by phone:', usersByPhone);
-
-            if (usersByPhone.length > 0) {
-              // Обновляем viber_id и информацию о пользователе
-              await db.query(
-                "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
-                [viber_id, JSON.stringify(viberUser), usersByPhone[0].id]
-              );
-
-              // Логируем регистрацию
-              await db.query(
-                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                 VALUES (?, ?, ?)`,
-                [viber_id, 'registration', `Автоматическая регистрация пользователя с участком ${usersByPhone[0].plot_number}`]
-              );
-
-              await sendViberMessage(
-                viber_id,
-                `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-              );
-            } else {
-              // Проверяем, может номер уже привязан
-              const [existingUser] = await db.query(
-                "SELECT * FROM users WHERE phone = ? AND viber_id IS NOT NULL",
-                [viberUser.phone_number]
-              );
-
-              if (existingUser.length > 0) {
-                await sendViberMessage(
-                  viber_id,
-                  "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
-                );
-              } else {
-                await sendViberMessage(
-                  viber_id,
-                  "Ваш номер телефона не найден в базе данных. Пожалуйста, обратитесь в правление для внесения или актуализации данных."
-                );
-              }
-              await db.query(
-                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                 VALUES (?, ?, ?)`,
-                [viber_id, 'registration_failed', `Попытка автоматической регистрации с номером ${viberUser.phone_number}`]
-              );
-            }
-          } else {
-            await sendViberMessage(
-              viber_id,
-              "Не удалось получить ваш номер телефона из Viber. Пожалуйста, обратитесь в правление для регистрации."
-            );
-          }
+          // Если пользователь не найден, отправляем сообщение о регистрации
+          await sendViberMessage(
+            viber_id, 
+            "Для начала работы с ботом, пожалуйста, отправьте номер вашего участка.\n\n" +
+            "Если вы не знаете номер участка или возникли проблемы с регистрацией, обратитесь в правление."
+          );
+          await db.query(
+            `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+             VALUES (?, ?, ?)`,
+            [viber_id, 'unregistered_user', 'Попытка использования бота без регистрации']
+          );
           return res.status(200).json({ status: "ok" });
         }
 
@@ -369,10 +320,75 @@ export default function viberRoutes(db) {
             break;
 
           default:
-            await sendViberMessage(
-              viber_id,
-              "Неизвестная команда. Отправьте 'помощь' для просмотра доступных команд."
-            );
+            // Проверяем, не является ли сообщение номером участка
+            const plotNumber = message_text.trim();
+            console.log('Checking plot number:', plotNumber);
+            
+            if (plotNumber.match(/^\d+$/)) {
+              console.log('Plot number format is valid');
+              
+              // Ищем пользователя по номеру участка
+              const [usersByPlot] = await db.query(
+                "SELECT * FROM users WHERE plot_number = ? AND viber_id IS NULL",
+                [plotNumber]
+              );
+              console.log('Users found by plot:', usersByPlot);
+
+              if (usersByPlot.length > 0) {
+                console.log('Found user:', usersByPlot[0]);
+                // Получаем информацию о пользователе Viber
+                const viberUser = await getViberUserDetails(viber_id);
+                const userDetails = viberUser ? JSON.stringify(viberUser) : null;
+
+                // Обновляем viber_id и информацию о пользователе
+                await db.query(
+                  "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
+                  [viber_id, userDetails, usersByPlot[0].id]
+                );
+
+                // Логируем регистрацию
+                await db.query(
+                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                   VALUES (?, ?, ?)`,
+                  [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber}`]
+                );
+
+                await sendViberMessage(
+                  viber_id,
+                  `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`
+                );
+              } else {
+                // Проверяем, может участок уже привязан
+                const [existingUser] = await db.query(
+                  "SELECT * FROM users WHERE plot_number = ? AND viber_id IS NOT NULL",
+                  [plotNumber]
+                );
+                console.log('Existing user with this plot:', existingUser);
+
+                if (existingUser.length > 0) {
+                  await sendViberMessage(
+                    viber_id,
+                    "Этот участок уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
+                  );
+                } else {
+                  await sendViberMessage(
+                    viber_id,
+                    "Участок с таким номером не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                  );
+                }
+                await db.query(
+                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                   VALUES (?, ?, ?)`,
+                  [viber_id, 'registration_failed', `Попытка регистрации с номером участка ${plotNumber}`]
+                );
+              }
+            } else {
+              console.log('Invalid plot number format');
+              await sendViberMessage(
+                viber_id,
+                "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка."
+              );
+            }
         }
       } else if (event === "conversation_started") {
         // Обработка начала диалога
@@ -380,72 +396,22 @@ export default function viberRoutes(db) {
         const viberUser = await getViberUserDetails(sender.id);
         console.log('New user details:', viberUser);
 
-        if (viberUser && viberUser.phone_number) {
-          // Пытаемся автоматически зарегистрировать пользователя
-          const [usersByPhone] = await db.query(
-            "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
-            [viberUser.phone_number]
-          );
-
-          if (usersByPhone.length > 0) {
-            // Обновляем viber_id и информацию о пользователе
-            await db.query(
-              "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
-              [sender.id, JSON.stringify(viberUser), usersByPhone[0].id]
-            );
-
-            await sendViberMessage(
-              sender.id,
-              `Добро пожаловать! Вы успешно зарегистрированы на участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-            );
-          } else {
-            await sendViberMessage(
-              sender.id,
-              "Добро пожаловать! Ваш номер телефона не найден в базе данных. Пожалуйста, обратитесь в правление для регистрации."
-            );
-          }
-        } else {
-          await sendViberMessage(
-            sender.id,
-            "Добро пожаловать! Не удалось получить ваш номер телефона из Viber. Пожалуйста, обратитесь в правление для регистрации."
-          );
-        }
+        await sendViberMessage(
+          sender.id, 
+          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего участка.\n\n" +
+          "Если вы не знаете номер участка или возникли проблемы с регистрацией, обратитесь в правление."
+        );
       } else if (event === "subscribed") {
         // Обработка подписки
         console.log('User subscribed:', sender);
         const viberUser = await getViberUserDetails(sender.id);
         console.log('New subscriber details:', viberUser);
 
-        if (viberUser && viberUser.phone_number) {
-          // Пытаемся автоматически зарегистрировать пользователя
-          const [usersByPhone] = await db.query(
-            "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
-            [viberUser.phone_number]
-          );
-
-          if (usersByPhone.length > 0) {
-            // Обновляем viber_id и информацию о пользователе
-            await db.query(
-              "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
-              [sender.id, JSON.stringify(viberUser), usersByPhone[0].id]
-            );
-
-            await sendViberMessage(
-              sender.id,
-              `Спасибо за подписку! Вы успешно зарегистрированы на участке ${usersByPhone[0].plot_number}.\n\nОтправьте "помощь" для просмотра доступных команд.`
-            );
-          } else {
-            await sendViberMessage(
-              sender.id,
-              "Спасибо за подписку! Ваш номер телефона не найден в базе данных. Пожалуйста, обратитесь в правление для регистрации."
-            );
-          }
-        } else {
-          await sendViberMessage(
-            sender.id,
-            "Спасибо за подписку! Не удалось получить ваш номер телефона из Viber. Пожалуйста, обратитесь в правление для регистрации."
-          );
-        }
+        await sendViberMessage(
+          sender.id, 
+          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего участка.\n\n" +
+          "Если вы не знаете номер участка или возникли проблемы с регистрацией, обратитесь в правление."
+        );
       } else {
         console.log('Received non-message event:', event);
       }
