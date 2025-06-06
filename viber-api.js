@@ -116,7 +116,7 @@ export default function viberRoutes(db) {
             // Первый шаг: запрашиваем номер телефона
             await sendViberMessage(
               viber_id, 
-              "Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX."
+              "Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
             );
             await db.query(
               `INSERT INTO bot_actions (viber_id, action_type, action_data) 
@@ -365,12 +365,15 @@ export default function viberRoutes(db) {
               const phoneNumber = message_text.trim();
               console.log('Original phone number:', phoneNumber);
               
-              // Нормализуем номер телефона (убираем все кроме цифр и +)
-              const normalizedPhone = phoneNumber.replace(/[^\d+]/g, '');
+              // Нормализуем номер телефона (оставляем только цифры)
+              const normalizedPhone = phoneNumber.replace(/\D/g, '');
               console.log('Normalized phone number:', normalizedPhone);
               
-              // Проверяем формат номера
-              if (normalizedPhone.match(/^\+380\d{9}$/)) {
+              // Проверяем формат номера (12 цифр, начинается с 380)
+              const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+              console.log('Is valid format:', isValidFormat);
+              
+              if (isValidFormat) {
                 console.log('Phone number format is valid');
                 // Ищем пользователя по номеру телефона
                 const [usersByPhone] = await db.query(
@@ -415,7 +418,7 @@ export default function viberRoutes(db) {
                 console.log('Invalid phone number format');
                 await sendViberMessage(
                   viber_id,
-                  "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате +380XXXXXXXXX"
+                  "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +)"
                 );
               }
             } else {
@@ -484,7 +487,7 @@ export default function viberRoutes(db) {
 
         await sendViberMessage(
           sender.id, 
-          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX."
+          "Добро пожаловать! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
         );
       } else if (event === "subscribed") {
         // Обработка подписки
@@ -494,7 +497,7 @@ export default function viberRoutes(db) {
 
         await sendViberMessage(
           sender.id, 
-          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате +380XXXXXXXXX."
+          "Спасибо за подписку! Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX."
         );
       } else {
         console.log('Received non-message event:', event);
