@@ -375,7 +375,8 @@ export default function viberRoutes(db) {
               
               if (isValidFormat) {
                 console.log('Phone number format is valid');
-                // Ищем пользователя по номеру телефона
+                
+                // Ищем пользователя по номеру телефона (точное совпадение)
                 const [usersByPhone] = await db.query(
                   "SELECT * FROM users WHERE phone = ? AND viber_id IS NULL",
                   [normalizedPhone]
@@ -408,10 +409,24 @@ export default function viberRoutes(db) {
                       "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса."
                     );
                   } else {
-                    await sendViberMessage(
-                      viber_id,
-                      "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                    // Проверяем номер без учета viber_id
+                    const [anyUser] = await db.query(
+                      "SELECT * FROM users WHERE phone = ?",
+                      [normalizedPhone]
                     );
+                    console.log('Any user with this phone:', anyUser);
+                    
+                    if (anyUser.length > 0) {
+                      await sendViberMessage(
+                        viber_id,
+                        "Номер телефона найден, но не может быть привязан. Пожалуйста, обратитесь в правление."
+                      );
+                    } else {
+                      await sendViberMessage(
+                        viber_id,
+                        "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление."
+                      );
+                    }
                   }
                 }
               } else {
