@@ -301,7 +301,7 @@ export default function viberRoutes(db) {
               );
 
               if (consumptionReadings.length < 2) {
-                await sendViberMessage(viber_id, "Недостаточно данных для расчета расхода.");
+                await sendViberMessage(viber_id, "Недостаточно данных для расчета расхода.", getCommandButtons());
               } else {
                 let consumptionMessage = "Расход электроэнергии:\n\n";
                 for (let i = 0; i < consumptionReadings.length - 1; i++) {
@@ -317,7 +317,7 @@ export default function viberRoutes(db) {
                   consumptionMessage += `\n📊 Средний расход: ${avgConsumption} кВт⋅ч/мес`;
                 }
 
-                await sendViberMessage(viber_id, consumptionMessage);
+                await sendViberMessage(viber_id, consumptionMessage, getCommandButtons());
               }
               await db.query(
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
@@ -393,7 +393,7 @@ export default function viberRoutes(db) {
 💰 Долг: ${debt ?? 'нет данных'}
 💵 Текущий тариф: ${tariff} руб/кВт⋅ч`;
               
-              await sendViberMessage(viber_id, message);
+              await sendViberMessage(viber_id, message, getCommandButtons());
               await db.query(
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
                  VALUES (?, ?, ?)`,
@@ -413,14 +413,14 @@ export default function viberRoutes(db) {
               );
 
               if (meterReadings.length === 0) {
-                await sendViberMessage(viber_id, "Показания счетчика отсутствуют.");
+                await sendViberMessage(viber_id, "Показания счетчика отсутствуют.", getCommandButtons());
               } else {
                 let readingsMessage = "Последние показания счетчика:\n";
                 meterReadings.forEach(r => {
                   const date = new Date(r.reading_date).toLocaleDateString('ru-RU');
                   readingsMessage += `📅 ${date}: ${r.value} кВт⋅ч\n`;
                 });
-                await sendViberMessage(viber_id, readingsMessage);
+                await sendViberMessage(viber_id, readingsMessage, getCommandButtons());
               }
               await db.query(
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
@@ -442,7 +442,7 @@ export default function viberRoutes(db) {
               );
 
               if (!lastPaymentInfo) {
-                await sendViberMessage(viber_id, "Информация об оплатах отсутствует.");
+                await sendViberMessage(viber_id, "Информация об оплатах отсутствует.", getCommandButtons());
               } else {
                 const paymentDate = new Date(lastPaymentInfo.payment_date).toLocaleDateString('ru-RU');
                 const amount = (lastPaymentInfo.paid_reading * lastPaymentInfo.tariff).toFixed(2);
@@ -451,7 +451,7 @@ export default function viberRoutes(db) {
 ⚡ Оплачено: ${lastPaymentInfo.paid_reading} кВт⋅ч
 💵 Сумма: ${amount} руб.
 💰 Тариф: ${lastPaymentInfo.tariff} руб/кВт⋅ч`;
-                await sendViberMessage(viber_id, paymentMessage);
+                await sendViberMessage(viber_id, paymentMessage, getCommandButtons());
               }
               await db.query(
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
@@ -866,7 +866,7 @@ export default function viberRoutes(db) {
       // Отправляем уведомление, если пользователь подписан и включил уведомления
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
         const message = `📊 Новое показание по участку ${users[0].plot_number}:\nДата: ${new Date(reading_date).toLocaleDateString('ru-RU')}\nЗначение: ${value} кВт⋅ч`;
-        await sendViberMessage(users[0].viber_id, message);
+        await sendViberMessage(users[0].viber_id, message, getCommandButtons());
       }
 
       res.json({ status: "ok" });
@@ -894,7 +894,7 @@ export default function viberRoutes(db) {
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
         const amount = (paid_reading * tariff).toFixed(2);
         const message = `💰 Новая оплата по участку ${users[0].plot_number}:\nДата: ${new Date(payment_date).toLocaleDateString('ru-RU')}\nОплачено: ${paid_reading} кВт⋅ч\nСумма: ${amount} руб.`;
-        await sendViberMessage(users[0].viber_id, message);
+        await sendViberMessage(users[0].viber_id, message, getCommandButtons());
       }
 
       res.json({ status: "ok" });
