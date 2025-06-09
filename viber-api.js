@@ -84,6 +84,37 @@ export default function viberRoutes(db) {
   }
 
   /**
+   * Обработка отписки пользователя от бота
+   * @param {string} viber_id - ID пользователя в Viber
+   */
+  async function handleUnsubscribe(viber_id) {
+    try {
+      console.log('Processing unsubscribe for viber_id:', viber_id);
+      
+      // Обновляем данные пользователя
+      await db.query(
+        `UPDATE users 
+         SET viber_id = NULL, 
+             viber_details = NULL,
+             notifications_enabled = 1
+         WHERE viber_id = ?`,
+        [viber_id]
+      );
+
+      // Логируем отписку
+      await db.query(
+        `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+         VALUES (?, ?, ?)`,
+        [viber_id, 'unsubscribe', 'Пользователь отписался от бота']
+      );
+
+      console.log('Successfully processed unsubscribe for viber_id:', viber_id);
+    } catch (err) {
+      console.error('Error processing unsubscribe:', err);
+    }
+  }
+
+  /**
    * Отправка сообщения пользователю в Viber
    * @param {string} viber_id - ID пользователя в Viber
    * @param {string} message - Текст сообщения
@@ -117,8 +148,8 @@ export default function viberRoutes(db) {
             TextVAlign: "middle", // Вертикальное выравнивание
             BgColor: "#FFFFFF", // Стандартный цвет фона Viber
             TextColor: "#000000", // Стандартный цвет текста Viber
-            BorderWidth: 1, // Ширина границы
-            BorderColor: "#E0E0E0", // Цвет границы (светло-серый)
+            BorderWidth: 3, // Увеличенная ширина границы
+            BorderColor: "#7367F0", // Фиолетовый цвет границы (стандартный цвет Viber)
             Silent: false // Звук при нажатии
           }))
         };
@@ -183,6 +214,13 @@ export default function viberRoutes(db) {
       // Если viber_id не найден, завершаем обработку
       if (!viber_id) {
         console.log('No viber_id found in webhook data');
+        return res.status(200).json({ status: "ok" });
+      }
+
+      // Обработка отписки от бота
+      if (event === "unsubscribed") {
+        console.log('User unsubscribed:', viber_id);
+        await handleUnsubscribe(viber_id);
         return res.status(200).json({ status: "ok" });
       }
 
