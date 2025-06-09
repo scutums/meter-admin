@@ -607,7 +607,161 @@ export default function viberRoutes(db) {
         );
         console.log('Temp registration lookup:', tempRegistrations);
 
-        // ... (оставшаяся часть кода регистрации)
+        if (tempRegistrations.length === 0) {
+          // Проверка тестового номера
+          if (message_text === '123') {
+            console.log('Test phone number detected');
+            await db.query(
+              "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+              [viber_id, '380505699852']
+            );
+
+            await sendViberMessage(
+              viber_id,
+              "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+              getRegistrationButtons()
+            );
+            return res.status(200).json({ status: "ok" });
+          }
+          
+          // Проверка реального номера телефона
+          const phoneNumber = message_text.trim();
+          console.log('Original phone number:', phoneNumber);
+          
+          // Нормализация номера телефона
+          const normalizedPhone = phoneNumber.replace(/\D/g, '');
+          console.log('Normalized phone number:', normalizedPhone);
+          
+          // Проверка формата номера
+          const isValidFormat = normalizedPhone.match(/^380\d{9}$/);
+          console.log('Is valid format:', isValidFormat);
+          
+          if (isValidFormat) {
+            console.log('Phone number format is valid');
+            
+            // Поиск пользователя по номеру телефона
+            const [usersByPhone] = await db.query(
+              "SELECT * FROM users WHERE phone = ?",
+              [normalizedPhone]
+            );
+            console.log('Users found by phone:', usersByPhone);
+
+            if (usersByPhone.length > 0) {
+              const user = usersByPhone[0];
+              console.log('Found user:', user);
+              
+              if (user.viber_id) {
+                console.log('User already has viber_id:', user.viber_id);
+                await sendViberMessage(
+                  viber_id,
+                  "Этот номер телефона уже привязан к другому пользователю Viber. Пожалуйста, обратитесь в правление для решения вопроса.",
+                  getRegistrationButtons()
+                );
+              } else {
+                console.log('Saving to temp_registrations');
+                // Сохранение номера телефона во временную таблицу
+                await db.query(
+                  "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
+                  [viber_id, normalizedPhone]
+                );
+
+                await sendViberMessage(
+                  viber_id,
+                  "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
+                  getRegistrationButtons()
+                );
+              }
+            } else {
+              console.log('No user found with this phone number');
+              await sendViberMessage(
+                viber_id,
+                "Номер телефона не найден в базе данных. Пожалуйста, проверьте номер и попробуйте снова или обратитесь в правление.",
+                getRegistrationButtons()
+              );
+            }
+          } else {
+            console.log('Invalid phone number format');
+            await sendViberMessage(
+              viber_id,
+              "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования",
+              getRegistrationButtons()
+            );
+          }
+        } else {
+          // Второй шаг регистрации: проверка номера участка
+          const plotNumber = message_text.trim();
+          console.log('Checking plot number:', plotNumber);
+          console.log('Temp registration:', tempRegistrations[0]);
+          
+          if (plotNumber.match(/^\d+$/)) {
+            // Получаем сохраненный номер телефона
+            const tempReg = tempRegistrations[0];
+            console.log('Using phone from temp registration:', tempReg.phone);
+            
+            // Проверяем принадлежность участка
+            const [usersByPlot] = await db.query(
+              "SELECT * FROM users WHERE plot_number = ? AND phone = ? AND viber_id IS NULL",
+              [plotNumber, tempReg.phone]
+            );
+            console.log('Users found by plot and phone:', usersByPlot);
+
+            if (usersByPlot.length > 0) {
+              // Получаем информацию о пользователе Viber
+              const viberUser = await getViberUserDetails(viber_id);
+              const userDetails = viberUser ? JSON.stringify(viberUser) : null;
+
+              // Обновляем данные пользователя
+              await db.query(
+                "UPDATE users SET viber_id = ?, viber_details = ? WHERE id = ?",
+                [viber_id, userDetails, usersByPlot[0].id]
+              );
+
+              // Удаляем временную регистрацию
+              await db.query(
+                "DELETE FROM temp_registrations WHERE viber_id = ?",
+                [viber_id]
+              );
+
+              // Логируем успешную регистрацию
+              await db.query(
+                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                 VALUES (?, ?, ?)`,
+                [viber_id, 'registration', `Регистрация пользователя с участком ${plotNumber} и телефоном ${tempReg.phone}`]
+              );
+
+              await sendViberMessage(
+                viber_id,
+                `Успешная регистрация! Теперь вы можете получать информацию о вашем участке ${plotNumber}.\n\nОтправьте "помощь" для просмотра доступных команд.`,
+                getCommandButtons()
+              );
+            } else {
+              console.log('No matching plot found for phone:', tempReg.phone);
+              await sendViberMessage(
+                viber_id,
+                "Участок с таким номером не найден или не привязан к вашему номеру телефона.\n\nПожалуйста, проверьте номер и попробуйте снова.\n\nЕсли вы уверены, что номер правильный, обратитесь в правление.",
+                getRegistrationButtons()
+              );
+            }
+          } else if (message_text.toLowerCase() === 'отмена') {
+            // Отмена регистрации
+            await db.query(
+              "DELETE FROM temp_registrations WHERE viber_id = ?",
+              [viber_id]
+            );
+            await sendViberMessage(
+              viber_id,
+              "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+            );
+          } else {
+            console.log('Invalid plot number format:', plotNumber);
+            await sendViberMessage(
+              viber_id,
+              "Неверный формат номера участка. Пожалуйста, отправьте только цифры номера участка.",
+              getRegistrationButtons()
+            );
+          }
+        }
+        return res.status(200).json({ status: "ok" });
       } else if (event === "conversation_started") {
         // Обработка начала диалога с ботом
         if (!sender) {
