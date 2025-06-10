@@ -288,21 +288,27 @@ app.get("/api/users/:id", authMiddleware, async (req, res) => {
 });
 
 app.put("/api/users/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  const { full_name, phone } = req.body;
-  
-  if (!full_name) {
-    return res.status(400).json({ message: "ФИО обязательно для заполнения" });
-  }
-
   try {
-    await db.query(
+    const userId = req.params.id;
+    const { full_name, phone } = req.body;
+
+    if (!full_name) {
+      return res.status(400).json({ error: "ФИО обязательно для заполнения" });
+    }
+
+    const [result] = await db.query(
       "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
-      [full_name, phone, id]
+      [full_name, phone, userId]
     );
-    res.json({ success: true, message: "Данные успешно обновлены" });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json({ message: "Данные успешно обновлены" });
   } catch (err) {
-    res.status(500).json({ message: "Ошибка обновления данных", details: err.message });
+    console.error("Ошибка при обновлении пользователя:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
