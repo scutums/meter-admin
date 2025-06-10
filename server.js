@@ -8,6 +8,7 @@ import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
+import { sendViberMessage, getCommandButtons } from './viber-api';
 
 dotenv.config();
 
@@ -218,10 +219,41 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
       });
     }
 
+    // Добавляем показания
     await db.query(
       `INSERT INTO readings (user_id, reading_date, value) VALUES (?, ?, ?)`,
       [user_id, reading_date, value]
     );
+
+    // Получаем информацию о пользователе и его настройках уведомлений
+    const [userInfo] = await db.query(
+      `SELECT viber_id, notifications_enabled, plot_number 
+       FROM users 
+       WHERE id = ?`,
+      [user_id]
+    );
+
+    // Если у пользователя есть Viber ID и включены уведомления, отправляем сообщение
+    if (userInfo[0]?.viber_id && userInfo[0]?.notifications_enabled) {
+      const message = `📊 Новые показания по участку ${userInfo[0].plot_number}:
+📅 Дата: ${new Date(reading_date).toLocaleDateString('ru-RU')}
+⚡ Значение: ${value} кВт⋅ч`;
+
+      try {
+        await sendViberMessage(userInfo[0].viber_id, message, getCommandButtons());
+        
+        // Логируем отправку уведомления
+        await db.query(
+          `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+           VALUES (?, ?, ?)`,
+          [userInfo[0].viber_id, 'reading_notification', `Уведомление о новых показаниях по участку ${userInfo[0].plot_number}`]
+        );
+      } catch (error) {
+        console.error('Ошибка отправки уведомления:', error);
+        // Не прерываем выполнение, если не удалось отправить уведомление
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Ошибка вставки", details: err.message });
