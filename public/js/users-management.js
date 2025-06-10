@@ -1,8 +1,25 @@
 document.addEventListener('DOMContentLoaded', function() {
-    loadNavbar();
-    loadUsers();
-    setupEventListeners();
+    // Проверяем наличие токена
+    const token = localStorage.getItem("token");
+    if (!token) {
+        window.location.href = "/login.html";
+        return;
+    }
+
+    // Инициализируем страницу
+    initializePage();
 });
+
+async function initializePage() {
+    try {
+        await loadNavbar();
+        await loadUsers();
+        setupEventListeners();
+    } catch (error) {
+        console.error("Ошибка инициализации страницы:", error);
+        alert("Ошибка при загрузке страницы");
+    }
+}
 
 function setupEventListeners() {
     document.getElementById('saveUserChanges').addEventListener('click', saveUserChanges);
@@ -50,6 +67,9 @@ async function loadUsers() {
         }
         const users = await response.json();
         const tbody = document.getElementById("usersTableBody");
+        if (!tbody) {
+            throw new Error("Элемент таблицы не найден");
+        }
         tbody.innerHTML = "";
         
         users.forEach(user => {
