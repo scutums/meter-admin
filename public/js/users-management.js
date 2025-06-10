@@ -118,7 +118,7 @@ function openEditModal(user) {
 
     // Показываем/скрываем кнопку отключения Viber
     const disconnectButton = document.getElementById('disconnectViber');
-    disconnectButton.style.display = user.viber_id !== '-' ? 'block' : 'none';
+    disconnectButton.style.display = user.viber_id ? 'block' : 'none';
 
     const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
     modal.show();
@@ -168,10 +168,11 @@ async function disconnectViber() {
     const userId = document.getElementById('editUserId').value;
 
     try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`/api/users/${userId}/disconnect-viber`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${token}`
             }
         });
 
@@ -182,7 +183,7 @@ async function disconnectViber() {
         // Закрываем модальное окно и обновляем список
         const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
         modal.hide();
-        loadUsers();
+        await loadUsers();
         
         alert('Пользователь успешно отключен от Viber');
     } catch (error) {
