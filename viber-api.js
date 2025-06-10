@@ -486,21 +486,6 @@ export default function viberRoutes(db) {
               );
 
               if (tempRegistrations.length === 0) {
-                // Проверка тестового номера
-                if (message_text === '123') {
-                  console.log('Test phone number detected');
-                  await db.query(
-                    "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-                    [viber_id, '380505699852']
-                  );
-
-                  await sendViberMessage(
-                    viber_id,
-                    "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
-                    getRegistrationButtons()
-                  );
-                  return res.status(200).json({ status: "ok" });
-                }
                 
                 // Проверка реального номера телефона
                 const phoneNumber = message_text.trim();
@@ -561,7 +546,7 @@ export default function viberRoutes(db) {
                   console.log('Invalid phone number format');
                   await sendViberMessage(
                     viber_id,
-                    "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования",
+                    "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +)",
                     getRegistrationButtons()
                   );
                 }
@@ -628,7 +613,7 @@ export default function viberRoutes(db) {
                   );
                   await sendViberMessage(
                     viber_id,
-                    "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+                    "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +)"
                   );
                 } else {
                   console.log('Invalid plot number format:', plotNumber);
@@ -651,21 +636,6 @@ export default function viberRoutes(db) {
         console.log('Temp registration lookup:', tempRegistrations);
 
         if (tempRegistrations.length === 0) {
-          // Проверка тестового номера
-          if (message_text === '123') {
-            console.log('Test phone number detected');
-            await db.query(
-              "INSERT INTO temp_registrations (viber_id, phone) VALUES (?, ?)",
-              [viber_id, '380505699852']
-            );
-
-            await sendViberMessage(
-              viber_id,
-              "Номер телефона подтвержден. Теперь, пожалуйста, отправьте номер вашего участка (только цифры).",
-              getRegistrationButtons()
-            );
-            return res.status(200).json({ status: "ok" });
-          }
           
           // Проверка реального номера телефона
           const phoneNumber = message_text.trim();
@@ -726,7 +696,7 @@ export default function viberRoutes(db) {
             console.log('Invalid phone number format');
             await sendViberMessage(
               viber_id,
-              "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +) или 123 для тестирования",
+              "Неверный формат номера телефона. Пожалуйста, отправьте номер в формате 380XXXXXXXXX (без +)",
               getRegistrationButtons()
             );
           }
@@ -793,7 +763,7 @@ export default function viberRoutes(db) {
             );
             await sendViberMessage(
               viber_id,
-              "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +) или 123 для тестирования"
+              "Регистрация отменена. Для начала работы с ботом, пожалуйста, отправьте номер вашего телефона в формате 380XXXXXXXXX (без +)"
             );
           } else {
             console.log('Invalid plot number format:', plotNumber);
