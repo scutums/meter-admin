@@ -130,12 +130,20 @@ async function saveUserChanges() {
     const fullName = document.getElementById('editFullName').value;
     const phone = document.getElementById('editPhone').value;
 
+    // Валидация номера телефона
+    const phoneRegex = /^380\d{9}$/;
+    if (phone && !phoneRegex.test(phone)) {
+        alert('Неверный формат номера телефона. Пожалуйста, введите номер в формате 380XXXXXXXXX (без +)');
+        return;
+    }
+
     try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`/api/users/${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
                 full_name: fullName,
@@ -150,7 +158,7 @@ async function saveUserChanges() {
         // Закрываем модальное окно и обновляем список
         const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
         modal.hide();
-        loadUsers();
+        await loadUsers();
         
         alert('Данные успешно обновлены');
     } catch (error) {
