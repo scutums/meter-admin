@@ -8,6 +8,7 @@ import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
+import usersRouter from "./src/routes/users.js";
 
 dotenv.config();
 
@@ -46,6 +47,9 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Добавляем маршруты Viber
 app.use("/viber", viberRoutes(db));
+
+// Маршруты API
+app.use("/api/users", usersRouter);
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;

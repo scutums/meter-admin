@@ -391,7 +391,7 @@ export default function viberRoutes(db) {
               const message = `Информация по участку ${user.plot_number}:
 👤 Владелец: ${user.full_name}
 💰 Долг: ${debt ?? 'нет данных'}
-💵 Текущий тариф: ${tariff} руб/кВт⋅ч`;
+💵 Текущий тариф: ${tariff} грн/кВт⋅ч`;
               
               await sendViberMessage(viber_id, message, getCommandButtons());
               await db.query(
