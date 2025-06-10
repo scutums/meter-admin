@@ -39,74 +39,62 @@ async function loadNavbar() {
 // Загружает список пользователей
 async function loadUsers() {
     try {
-        const response = await fetch('/api/users', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-        });
-        
+        const response = await fetch("/api/users-management");
         if (!response.ok) {
-            throw new Error('Не удалось загрузить данные пользователей');
+            throw new Error("Ошибка загрузки данных");
         }
-
         const users = await response.json();
-        const tableBody = document.getElementById('usersTableBody');
-        tableBody.innerHTML = '';
-
+        const tbody = document.querySelector("#usersTable tbody");
+        tbody.innerHTML = "";
+        
         users.forEach(user => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
                 <td>${user.plot_number}</td>
                 <td>${user.full_name}</td>
-                <td>${user.phone || '-'}</td>
+                <td>${user.phone}</td>
                 <td>${user.viber_id || '-'}</td>
-                <td class="text-center">
-                    ${user.notifications_enabled ? '✅' : '❌'}
-                </td>
-                <td class="text-center">
-                    ${user.reminder_day || '-'}
-                </td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-primary edit-user" data-user-id="${user.id}">
-                        Редактировать
+                <td>${user.notifications_enabled ? 'Да' : 'Нет'}</td>
+                <td>${user.reminder_day || '-'}</td>
+                <td>${user.viber_details || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary edit-btn" data-id="${user.id}">
+                        <i class="fas fa-edit"></i>
                     </button>
                 </td>
             `;
-            tableBody.appendChild(row);
+            tbody.appendChild(tr);
         });
 
-        // Добавляем обработчики событий для кнопок редактирования
-        document.querySelectorAll('.edit-user').forEach(button => {
-            button.addEventListener('click', () => openEditModal(button.dataset.userId));
+        // Добавляем обработчики для кнопок редактирования
+        document.querySelectorAll(".edit-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const userId = btn.dataset.id;
+                const user = users.find(u => u.id === parseInt(userId));
+                if (user) {
+                    openEditModal(user);
+                }
+            });
         });
-
     } catch (error) {
-        console.error('Ошибка загрузки пользователей:', error);
-        alert('Ошибка при загрузке данных пользователей');
+        console.error("Ошибка:", error);
+        alert("Ошибка при загрузке данных");
     }
 }
 
 // Открывает модальное окно редактирования
-function openEditModal(userId) {
-    const user = document.querySelector(`[data-user-id="${userId}"]`).closest('tr');
-    const plotNumber = user.cells[0].textContent;
-    const fullName = user.cells[1].textContent;
-    const phone = user.cells[2].textContent;
-    const viberId = user.cells[3].textContent;
-    const notificationsEnabled = user.cells[4].textContent.includes('✅');
-    const reminderDay = user.cells[5].textContent;
-
-    document.getElementById('editUserId').value = userId;
-    document.getElementById('editPlotNumber').textContent = plotNumber;
-    document.getElementById('editFullName').value = fullName;
-    document.getElementById('editPhone').value = phone;
-    document.getElementById('editViberId').textContent = viberId;
-    document.getElementById('editNotificationsEnabled').textContent = notificationsEnabled ? 'Включены' : 'Отключены';
-    document.getElementById('editReminderDay').textContent = reminderDay;
+function openEditModal(user) {
+    document.getElementById('editUserId').value = user.id;
+    document.getElementById('editPlotNumber').textContent = user.plot_number;
+    document.getElementById('editFullName').value = user.full_name;
+    document.getElementById('editPhone').value = user.phone;
+    document.getElementById('editViberId').textContent = user.viber_id || '-';
+    document.getElementById('editNotificationsEnabled').textContent = user.notifications_enabled ? 'Включены' : 'Отключены';
+    document.getElementById('editReminderDay').textContent = user.reminder_day || '-';
 
     // Показываем/скрываем кнопку отключения Viber
     const disconnectButton = document.getElementById('disconnectViber');
-    disconnectButton.style.display = viberId !== '-' ? 'block' : 'none';
+    disconnectButton.style.display = user.viber_id !== '-' ? 'block' : 'none';
 
     const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
     modal.show();
