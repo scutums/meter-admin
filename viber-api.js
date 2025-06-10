@@ -449,8 +449,8 @@ export default function viberRoutes(db) {
                 const paymentMessage = `Последняя оплата:
 📅 Дата: ${paymentDate}
 ⚡ Оплачено: ${lastPaymentInfo.paid_reading} кВт⋅ч
-💵 Сумма: ${amount} руб.
-💰 Тариф: ${lastPaymentInfo.tariff} руб/кВт⋅ч`;
+💵 Сумма: ${amount} грн.
+💰 Тариф: ${lastPaymentInfo.tariff} грн/кВт⋅ч`;
                 await sendViberMessage(viber_id, paymentMessage, getCommandButtons());
               }
               await db.query(
@@ -893,7 +893,7 @@ export default function viberRoutes(db) {
       // Отправляем уведомление, если пользователь подписан и включил уведомления
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
         const amount = (paid_reading * tariff).toFixed(2);
-        const message = `💰 Новая оплата по участку ${users[0].plot_number}:\nДата: ${new Date(payment_date).toLocaleDateString('ru-RU')}\nОплачено: ${paid_reading} кВт⋅ч\nСумма: ${amount} руб.`;
+        const message = `💰 Новая оплата по участку ${users[0].plot_number}:\nДата: ${new Date(payment_date).toLocaleDateString('ru-RU')}\nОплачено: ${paid_reading} кВт⋅ч\nСумма: ${amount} грн.`;
         await sendViberMessage(users[0].viber_id, message, getCommandButtons());
       }
 

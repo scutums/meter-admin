@@ -8,8 +8,6 @@ import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
-import usersRouter from "./src/routes/users.js";
-import usersManagementRouter from "./src/routes/users-management.js";
 
 dotenv.config();
 
@@ -41,9 +39,6 @@ try {
   process.exit(1);
 }
 
-// Добавляем db в app.locals для использования в маршрутах
-app.locals.db = db;
-
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -52,27 +47,18 @@ app.use(express.static(path.join(__dirname, "public")));
 // Добавляем маршруты Viber
 app.use("/viber", viberRoutes(db));
 
-// Маршруты API
-app.use("/api/users", usersRouter);
-app.use("/api/users-management", usersManagementRouter);
-
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: "No authorization header" });
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Нет токена" });
   }
-
   const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
-  }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid token" });
+  } catch {
+    res.status(401).json({ message: "Неверный токен" });
   }
 }
 
@@ -291,46 +277,38 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
 });
 
 app.get("/api/users/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
   try {
-    const [users] = await db.query(`
-      SELECT 
-        id,
-        plot_number,
-        full_name,
-        phone,
-        viber_id,
-        notifications_enabled,
-        reminder_day,
-        viber_details
-      FROM users 
-      WHERE id = ?
-    `, [req.params.id]);
-
-    if (users.length === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    res.json(users[0]);
+    const [rows] = await db.query("SELECT id, plot_number, full_name, phone FROM users WHERE id = ?", [id]);
+    if (rows.length === 0) return res.status(404).json({ message: "Пользователь не найден" });
+    res.json(rows[0]);
   } catch (err) {
-    console.error("Ошибка при получении данных пользователя:", err);
-    res.status(500).json({ error: "Ошибка при получении данных пользователя" });
+    res.status(500).json({ error: "Ошибка базы данных", details: err.message });
   }
 });
 
 app.put("/api/users/:id", authMiddleware, async (req, res) => {
   try {
+    const userId = req.params.id;
     const { full_name, phone } = req.body;
-    
-    await db.query(`
-      UPDATE users 
-      SET full_name = ?, phone = ?
-      WHERE id = ?
-    `, [full_name, phone, req.params.id]);
 
-    res.json({ success: true });
+    if (!full_name) {
+      return res.status(400).json({ error: "ФИО обязательно для заполнения" });
+    }
+
+    const [result] = await db.query(
+      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
+      [full_name, phone, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json({ message: "Данные успешно обновлены" });
   } catch (err) {
-    console.error("Ошибка при обновлении данных пользователя:", err);
-    res.status(500).json({ error: "Ошибка при обновлении данных пользователя" });
+    console.error("Ошибка при обновлении пользователя:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
@@ -540,16 +518,20 @@ app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/auth-user-info", authMiddleware, async (req, res) => {
+app.get("/api/auth-user-info", async (req, res) => {
   try {
-    const [user] = await db.query(
-      "SELECT id, plot_number, full_name FROM users WHERE id = ?",
-      [req.user.id]
-    );
-    res.json(user);
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Нет токена" });
+    }
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const login = decoded.login;
+    const [rows] = await db.query("SELECT full_name, plot_number, phone FROM users_auth WHERE login = ?", [login]);
+    if (!rows.length) return res.status(404).json({ message: "Пользователь не найден" });
+    res.json(rows[0]);
   } catch (err) {
-    console.error("Error getting user info:", err);
-    res.status(500).json({ error: "Database error" });
+    res.status(401).json({ message: "Ошибка авторизации" });
   }
 });
 
@@ -560,19 +542,26 @@ app.get('/bot-actions', (req, res) => {
 
 app.post("/api/users/:id/disconnect-viber", authMiddleware, async (req, res) => {
   try {
-    await db.query(`
-      UPDATE users 
-      SET viber_id = NULL, 
-          notifications_enabled = false, 
-          reminder_day = NULL, 
-          viber_details = NULL
-      WHERE id = ?
-    `, [req.params.id]);
+    const userId = req.params.id;
 
-    res.json({ success: true });
+    const [result] = await db.query(
+      `UPDATE users 
+       SET viber_id = NULL,
+           notifications_enabled = 1,
+           reminder_day = 25,
+           viber_details = NULL
+       WHERE id = ?`,
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json({ message: "Пользователь успешно отключен от Viber" });
   } catch (err) {
-    console.error("Ошибка при отключении Viber:", err);
-    res.status(500).json({ error: "Ошибка при отключении Viber" });
+    console.error("Ошибка при отключении пользователя от Viber:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
@@ -597,55 +586,6 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Ошибка в /api/users-management:", err);
     res.status(500).json({ error: "Database error", details: err.message });
-  }
-});
-
-// Получение данных конкретного пользователя для редактирования
-app.get("/api/users/edit/:id", authMiddleware, async (req, res) => {
-  try {
-    const [users] = await db.query(`
-      SELECT 
-        id,
-        plot_number,
-        full_name,
-        phone
-      FROM users 
-      WHERE id = ?
-    `, [req.params.id]);
-
-    if (users.length === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    res.json(users[0]);
-  } catch (err) {
-    console.error("Ошибка при получении данных пользователя:", err);
-    res.status(500).json({ error: "Ошибка при получении данных пользователя" });
-  }
-});
-
-// Обновление данных пользователя
-app.put("/api/users/edit/:id", authMiddleware, async (req, res) => {
-  try {
-    const { full_name, phone } = req.body;
-    
-    if (!full_name) {
-      return res.status(400).json({ error: "ФИО обязательно для заполнения" });
-    }
-
-    const [result] = await db.query(
-      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
-      [full_name, phone, req.params.id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    res.json({ success: true, message: "Данные успешно обновлены" });
-  } catch (err) {
-    console.error("Ошибка при обновлении данных пользователя:", err);
-    res.status(500).json({ error: "Ошибка при обновлении данных пользователя" });
   }
 });
 
