@@ -41,6 +41,9 @@ try {
   process.exit(1);
 }
 
+// Добавляем db в app.locals для использования в маршрутах
+app.locals.db = db;
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

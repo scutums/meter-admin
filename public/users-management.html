@@ -30,56 +30,23 @@
                 <div class="card">
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table id="usersTable" class="table table-striped">
+                            <table class="table table-striped">
                                 <thead>
                                     <tr>
                                         <th>№ Участка</th>
                                         <th>ФИО</th>
                                         <th>Телефон</th>
-                                        <th>Viber</th>
+                                        <th>Viber ID</th>
                                         <th>Уведомления</th>
                                         <th>День напоминания</th>
-                                        <th>Детали Viber</th>
                                         <th>Действия</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="usersTableBody">
                                     <!-- Данные будут добавлены через JavaScript -->
                                 </tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Форма редактирования -->
-        <div class="row mt-4" id="editFormContainer" style="display: none;">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">Редактирование пользователя</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="editUserForm">
-                            <input type="hidden" id="editUserId">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="editFullName" class="form-label">ФИО</label>
-                                    <input type="text" class="form-control" id="editFullName" required>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="editPhone" class="form-label">Телефон</label>
-                                    <input type="tel" class="form-control" id="editPhone" required>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                                    <button type="button" class="btn btn-secondary" onclick="hideEditForm()">Отмена</button>
-                                </div>
-                            </div>
-                        </form>
                     </div>
                 </div>
             </div>
