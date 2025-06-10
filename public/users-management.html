@@ -29,7 +29,6 @@
                         <th>Viber ID</th>
                         <th>Уведомления</th>
                         <th>День напоминания</th>
-                        <th>Детали Viber</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -52,8 +51,8 @@
                     <form id="editUserForm">
                         <input type="hidden" id="editUserId">
                         <div class="mb-3">
-                            <label for="editPlotNumber" class="form-label">№ участка</label>
-                            <input type="text" class="form-control" id="editPlotNumber" readonly>
+                            <label class="form-label">№ участка</label>
+                            <div id="editPlotNumber" class="form-control-plaintext"></div>
                         </div>
                         <div class="mb-3">
                             <label for="editFullName" class="form-label">ФИО</label>
@@ -64,24 +63,21 @@
                             <input type="tel" class="form-control" id="editPhone" required>
                         </div>
                         <div class="mb-3">
-                            <label for="editViberId" class="form-label">Viber ID</label>
-                            <input type="text" class="form-control" id="editViberId">
+                            <label class="form-label">Viber ID</label>
+                            <div id="editViberId" class="form-control-plaintext"></div>
                         </div>
                         <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="editNotificationsEnabled">
-                                <label class="form-check-label" for="editNotificationsEnabled">
-                                    Включить уведомления
-                                </label>
-                            </div>
+                            <label class="form-label">Уведомления</label>
+                            <div id="editNotificationsEnabled" class="form-control-plaintext"></div>
                         </div>
                         <div class="mb-3">
-                            <label for="editReminderDay" class="form-label">День напоминания</label>
-                            <input type="number" class="form-control" id="editReminderDay" min="1" max="31">
+                            <label class="form-label">День напоминания</label>
+                            <div id="editReminderDay" class="form-control-plaintext"></div>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-danger me-auto" id="disconnectViber">Отключить от Viber</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                     <button type="button" class="btn btn-primary" id="saveUserChanges">Сохранить</button>
                 </div>

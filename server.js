@@ -440,6 +440,31 @@ app.get('/bot-actions', (req, res) => {
     res.sendFile(path.join(__dirname, 'bot-actions.html'));
 });
 
+app.post("/api/users/:id/disconnect-viber", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const [result] = await db.query(
+      `UPDATE users 
+       SET viber_id = NULL,
+           notifications_enabled = 1,
+           reminder_day = 25,
+           viber_details = NULL
+       WHERE id = ?`,
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json({ message: "Пользователь успешно отключен от Viber" });
+  } catch (err) {
+    console.error("Ошибка при отключении пользователя от Viber:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
 });
