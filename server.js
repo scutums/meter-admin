@@ -8,7 +8,6 @@ import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
-import { sendViberMessage, getCommandButtons } from './viber-api';
 
 dotenv.config();
 
@@ -219,41 +218,10 @@ app.post("/api/readings", authMiddleware, async (req, res) => {
       });
     }
 
-    // Добавляем показания
     await db.query(
       `INSERT INTO readings (user_id, reading_date, value) VALUES (?, ?, ?)`,
       [user_id, reading_date, value]
     );
-
-    // Получаем информацию о пользователе и его настройках уведомлений
-    const [userInfo] = await db.query(
-      `SELECT viber_id, notifications_enabled, plot_number 
-       FROM users 
-       WHERE id = ?`,
-      [user_id]
-    );
-
-    // Если у пользователя есть Viber ID и включены уведомления, отправляем сообщение
-    if (userInfo[0]?.viber_id && userInfo[0]?.notifications_enabled) {
-      const message = `📊 Новые показания по участку ${userInfo[0].plot_number}:
-📅 Дата: ${new Date(reading_date).toLocaleDateString('ru-RU')}
-⚡ Значение: ${value} кВт⋅ч`;
-
-      try {
-        await sendViberMessage(userInfo[0].viber_id, message, getCommandButtons());
-        
-        // Логируем отправку уведомления
-        await db.query(
-          `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-           VALUES (?, ?, ?)`,
-          [userInfo[0].viber_id, 'reading_notification', `Уведомление о новых показаниях по участку ${userInfo[0].plot_number}`]
-        );
-      } catch (error) {
-        console.error('Ошибка отправки уведомления:', error);
-        // Не прерываем выполнение, если не удалось отправить уведомление
-      }
-    }
-
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Ошибка вставки", details: err.message });
@@ -322,11 +290,11 @@ app.get("/api/users/:id", authMiddleware, async (req, res) => {
 app.put("/api/users/:id", authMiddleware, async (req, res) => {
   try {
     const userId = req.params.id;
-    const { full_name, phone } = req.body;
-
-    if (!full_name) {
+  const { full_name, phone } = req.body;
+  
+  if (!full_name) {
       return res.status(400).json({ error: "ФИО обязательно для заполнения" });
-    }
+  }
 
     const [result] = await db.query(
       "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
@@ -617,36 +585,6 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error("Ошибка в /api/users-management:", err);
-    res.status(500).json({ error: "Database error", details: err.message });
-  }
-});
-
-// Переключение статуса уведомлений
-app.post("/api/users/:id/toggle-notifications", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.params.id;
-
-    // Получаем текущий статус
-    const [settings] = await db.query(
-      "SELECT notifications_enabled FROM users WHERE id = ?",
-      [userId]
-    );
-
-    if (settings.length === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    const newStatus = !settings[0].notifications_enabled;
-
-    // Обновляем статус
-    await db.query(
-      "UPDATE users SET notifications_enabled = ? WHERE id = ?",
-      [newStatus, userId]
-    );
-
-    res.json({ notifications_enabled: newStatus });
-  } catch (err) {
-    console.error("Ошибка при изменении статуса уведомлений:", err);
     res.status(500).json({ error: "Database error", details: err.message });
   }
 });

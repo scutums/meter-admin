@@ -24,7 +24,6 @@ async function initializePage() {
 function setupEventListeners() {
     document.getElementById('saveUserChanges').addEventListener('click', saveUserChanges);
     document.getElementById('disconnectViber').addEventListener('click', disconnectViber);
-    document.getElementById('toggleNotifications').addEventListener('click', toggleNotifications);
 }
 
 // Загружает навигационную панель
@@ -198,33 +197,5 @@ async function disconnectViber() {
     } catch (error) {
         console.error('Ошибка отключения от Viber:', error);
         alert('Ошибка при отключении пользователя от Viber');
-    }
-}
-
-// Переключает статус уведомлений
-async function toggleNotifications() {
-    const userId = document.getElementById('editUserId').value;
-
-    try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`/api/users/${userId}/toggle-notifications`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Не удалось изменить статус уведомлений');
-        }
-
-        const result = await response.json();
-        document.getElementById('editNotificationsEnabled').textContent = result.notifications_enabled ? 'Включены' : 'Отключены';
-        await loadUsers();
-        
-        alert(`Уведомления ${result.notifications_enabled ? 'включены' : 'отключены'}`);
-    } catch (error) {
-        console.error('Ошибка изменения статуса уведомлений:', error);
-        alert('Ошибка при изменении статуса уведомлений');
     }
 } 
