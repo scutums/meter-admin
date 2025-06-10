@@ -1,6 +1,6 @@
 import express from "express";
-import { query, transaction } from "../utils/db.js";
-import { authMiddleware, adminMiddleware } from "../middleware/auth.js";
+import { query } from "../utils/db.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -11,6 +11,7 @@ const router = express.Router();
  */
 router.get("/users-management", authMiddleware, async (req, res) => {
     try {
+        console.log("Fetching users data...");
         const users = await query(`
             SELECT 
                 id,
@@ -25,12 +26,14 @@ router.get("/users-management", authMiddleware, async (req, res) => {
             ORDER BY plot_number
         `);
         
+        console.log(`Found ${users.length} users`);
         res.json(users);
     } catch (err) {
         console.error("Ошибка в /api/users/users-management:", err);
         res.status(500).json({ 
             error: "Database error", 
-            details: err.message 
+            details: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
         });
     }
 });

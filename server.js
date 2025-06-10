@@ -53,16 +53,21 @@ app.use("/api/users", usersRouter);
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Нет токена" });
+  if (!authHeader) {
+    return res.status(401).json({ error: "No authorization header" });
   }
+
   const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
-  } catch {
-    res.status(401).json({ message: "Неверный токен" });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
   }
 }
 
@@ -522,20 +527,16 @@ app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/auth-user-info", async (req, res) => {
+app.get("/api/auth-user-info", authMiddleware, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Нет токена" });
-    }
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const login = decoded.login;
-    const [rows] = await db.query("SELECT full_name, plot_number, phone FROM users_auth WHERE login = ?", [login]);
-    if (!rows.length) return res.status(404).json({ message: "Пользователь не найден" });
-    res.json(rows[0]);
+    const [user] = await db.query(
+      "SELECT id, plot_number, full_name FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    res.json(user);
   } catch (err) {
-    res.status(401).json({ message: "Ошибка авторизации" });
+    console.error("Error getting user info:", err);
+    res.status(500).json({ error: "Database error" });
   }
 });
 
