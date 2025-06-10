@@ -93,7 +93,14 @@ app.get("/api/users", authMiddleware, async (req, res) => {
         (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
         p.payment_date AS paid_date,
         p.paid_reading AS paid_kwh,
-        p.id as payment_id
+        p.id as payment_id,
+        CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as viber_registered,
+        CASE WHEN v.reminder_enabled = 1 THEN 1 ELSE 0 END as reminder_enabled,
+        CASE 
+          WHEN v.reminder_enabled = 1 AND v.reminder_days IS NOT NULL 
+          THEN v.reminder_days 
+          ELSE NULL 
+        END as days_until_reminder
       FROM users u
       INNER JOIN (
         SELECT r1.*
@@ -130,6 +137,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
+      LEFT JOIN viber_users v ON u.id = v.user_id
       ORDER BY u.plot_number
     `;
     const sqlAll = `
@@ -146,7 +154,14 @@ app.get("/api/users", authMiddleware, async (req, res) => {
         (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
         p.payment_date AS paid_date,
         p.paid_reading AS paid_kwh,
-        p.id as payment_id
+        p.id as payment_id,
+        CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as viber_registered,
+        CASE WHEN v.reminder_enabled = 1 THEN 1 ELSE 0 END as reminder_enabled,
+        CASE 
+          WHEN v.reminder_enabled = 1 AND v.reminder_days IS NOT NULL 
+          THEN v.reminder_days 
+          ELSE NULL 
+        END as days_until_reminder
       FROM users u
       LEFT JOIN (
         SELECT r1.*
@@ -180,6 +195,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
+      LEFT JOIN viber_users v ON u.id = v.user_id
       ORDER BY u.plot_number
     `;
     if (month) {
