@@ -1,9 +1,18 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Проверяем наличие токена
+    const token = localStorage.getItem("token");
+    if (!token) {
+        window.location.href = "/login.html";
+        return;
+    }
+
     // Загрузка навигационной панели
     fetch('/partials/nav.html')
         .then(response => response.text())
         .then(html => {
             document.getElementById('nav-placeholder').innerHTML = html;
+            // После загрузки навигации обновляем имя пользователя
+            updateUsername();
         });
 
     // Загрузка пользователей
@@ -19,7 +28,8 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/api/users/${userId}`, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
                 full_name: fullName,
@@ -32,7 +42,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Ошибка: ' + data.error);
             } else {
                 alert('Данные успешно обновлены');
-                $('#editUserModal').modal('hide');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
+                modal.hide();
                 loadUsers();
             }
         })
@@ -43,54 +54,84 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-function loadUsers() {
-    fetch('/api/users/users-management')
-        .then(response => response.json())
-        .then(users => {
-            const tbody = document.querySelector('#usersTable tbody');
-            tbody.innerHTML = '';
+function updateUsername() {
+    const token = localStorage.getItem("token");
+    fetch("/api/auth-user-info", {
+        headers: { Authorization: "Bearer " + token }
+    })
+    .then(res => res.json())
+    .then(user => {
+        const usernameElement = document.getElementById("username");
+        if (usernameElement) {
+            usernameElement.textContent = "👤 " + (user.full_name || user.plot_number || "Пользователь");
+        }
+    })
+    .catch(() => {
+        const usernameElement = document.getElementById("username");
+        if (usernameElement) {
+            usernameElement.textContent = "👤 Пользователь";
+        }
+    });
+}
 
-            users.forEach(user => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.plot_number}</td>
-                    <td>${user.full_name}</td>
-                    <td>${user.phone}</td>
-                    <td>${user.viber_id ? 'Да' : 'Нет'}</td>
-                    <td>${user.notifications_enabled ? 'Включены' : 'Отключены'}</td>
-                    <td>${user.reminder_day || '-'}</td>
-                    <td>${user.viber_details || '-'}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="editUser(${user.id}, '${user.full_name}', '${user.phone}')">
-                            Редактировать
+function loadUsers() {
+    const token = localStorage.getItem("token");
+    fetch('/api/users/users-management', {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    })
+    .then(response => response.json())
+    .then(users => {
+        const tbody = document.querySelector('#usersTable tbody');
+        tbody.innerHTML = '';
+
+        users.forEach(user => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${user.plot_number}</td>
+                <td>${user.full_name}</td>
+                <td>${user.phone}</td>
+                <td>${user.viber_id ? 'Да' : 'Нет'}</td>
+                <td>${user.notifications_enabled ? 'Включены' : 'Отключены'}</td>
+                <td>${user.reminder_day || '-'}</td>
+                <td>${user.viber_details || '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="editUser(${user.id}, '${user.full_name}', '${user.phone}')">
+                        Редактировать
+                    </button>
+                    ${user.viber_id ? `
+                        <button class="btn btn-sm btn-danger" onclick="disconnectViber(${user.id})">
+                            Отключить Viber
                         </button>
-                        ${user.viber_id ? `
-                            <button class="btn btn-sm btn-danger" onclick="disconnectViber(${user.id})">
-                                Отключить Viber
-                            </button>
-                        ` : ''}
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        })
-        .catch(error => {
-            console.error('Ошибка:', error);
-            alert('Произошла ошибка при загрузке данных');
+                    ` : ''}
+                </td>
+            `;
+            tbody.appendChild(row);
         });
+    })
+    .catch(error => {
+        console.error('Ошибка:', error);
+        alert('Произошла ошибка при загрузке данных');
+    });
 }
 
 function editUser(id, fullName, phone) {
     document.getElementById('editUserId').value = id;
     document.getElementById('editFullName').value = fullName;
     document.getElementById('editPhone').value = phone;
-    $('#editUserModal').modal('show');
+    const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+    modal.show();
 }
 
 function disconnectViber(userId) {
     if (confirm('Вы уверены, что хотите отключить пользователя от Viber?')) {
+        const token = localStorage.getItem("token");
         fetch(`/api/users/${userId}/disconnect-viber`, {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         })
         .then(response => response.json())
         .then(data => {

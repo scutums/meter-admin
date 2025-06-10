@@ -9,7 +9,9 @@
     <script>
         // Проверка токена
         const token = localStorage.getItem("token");
-        if (!token) window.location.href = "/login.html";
+        if (!token) {
+            window.location.href = "/login.html";
+        }
     </script>
 </head>
 <body class="bg-light">
