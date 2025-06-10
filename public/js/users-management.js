@@ -11,8 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.text())
         .then(html => {
             document.getElementById('nav-placeholder').innerHTML = html;
-            // После загрузки навигации обновляем имя пользователя
-            updateUsername();
         });
 
     // Загрузка пользователей
@@ -52,26 +50,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
-
-function updateUsername() {
-    const token = localStorage.getItem("token");
-    fetch("/api/auth-user-info", {
-        headers: { Authorization: "Bearer " + token }
-    })
-    .then(res => res.json())
-    .then(user => {
-        const usernameElement = document.getElementById("username");
-        if (usernameElement) {
-            usernameElement.textContent = "👤 " + (user.full_name || user.plot_number || "Пользователь");
-        }
-    })
-    .catch(() => {
-        const usernameElement = document.getElementById("username");
-        if (usernameElement) {
-            usernameElement.textContent = "👤 Пользователь";
-        }
-    });
-}
 
 function loadUsers() {
     const token = localStorage.getItem("token");
