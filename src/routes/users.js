@@ -5,7 +5,7 @@ import { authMiddleware, adminMiddleware } from "../middleware/auth.js";
 const router = express.Router();
 
 /**
- * @route GET /api/users-management
+ * @route GET /api/users/users-management
  * @desc Получить список всех пользователей с информацией о Viber
  * @access Private
  */
@@ -27,7 +27,7 @@ router.get("/users-management", authMiddleware, async (req, res) => {
         
         res.json(users);
     } catch (err) {
-        console.error("Ошибка в /api/users-management:", err);
+        console.error("Ошибка в /api/users/users-management:", err);
         res.status(500).json({ 
             error: "Database error", 
             details: err.message 

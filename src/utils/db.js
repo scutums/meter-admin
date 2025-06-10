@@ -46,13 +46,13 @@ export async function initializePool() {
  * @returns {Promise<Array>} Результат запроса
  * @throws {Error} Если произошла ошибка при выполнении запроса
  */
-export async function query(sql, params = []) {
+export async function query(sql, params) {
     try {
-        const [rows] = await pool.query(sql, params);
-        return rows;
-    } catch (err) {
-        console.error("Database query error:", err);
-        throw new Error("Database query failed");
+        const [results] = await pool.execute(sql, params);
+        return results;
+    } catch (error) {
+        console.error('Database query error:', error);
+        throw error;
     }
 }
 
@@ -70,9 +70,9 @@ export async function transaction(callback) {
         const result = await callback(connection);
         await connection.commit();
         return result;
-    } catch (err) {
+    } catch (error) {
         await connection.rollback();
-        throw err;
+        throw error;
     } finally {
         connection.release();
     }
