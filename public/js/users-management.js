@@ -83,7 +83,7 @@ async function loadUsers() {
                 <td>${user.reminder_day || '-'}</td>
                 <td>
                     <button class="btn btn-sm btn-primary edit-btn" data-id="${user.id}">
-                        <i class="fas fa-edit"></i>
+                        Редактировать
                     </button>
                 </td>
             `;
