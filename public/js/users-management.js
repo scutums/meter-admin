@@ -34,7 +34,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 phone: phone
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 alert('Ошибка: ' + data.error);
@@ -53,12 +58,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function loadUsers() {
     const token = localStorage.getItem("token");
+    if (!token) {
+        window.location.href = "/login.html";
+        return;
+    }
+
     fetch('/api/users-management/list', {
+        method: 'GET',
         headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 401) {
+                // Если токен недействителен, перенаправляем на страницу входа
+                localStorage.removeItem("token");
+                window.location.href = "/login.html";
+                return;
+            }
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
     .then(users => {
         const tbody = document.querySelector('#usersTable tbody');
         tbody.innerHTML = '';
@@ -110,13 +134,30 @@ function hideEditForm() {
 function disconnectViber(userId) {
     if (confirm('Вы уверены, что хотите отключить пользователя от Viber?')) {
         const token = localStorage.getItem("token");
+        if (!token) {
+            window.location.href = "/login.html";
+            return;
+        }
+
         fetch(`/api/users-management/disconnect-viber/${userId}`, {
             method: 'POST',
             headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem("token");
+                    window.location.href = "/login.html";
+                    return;
+                }
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 alert('Ошибка: ' + data.error);
