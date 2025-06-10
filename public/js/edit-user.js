@@ -17,12 +17,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Загрузка данных пользователя
-    fetch(`/api/users-management/${userId}`, {
+    fetch(`/api/users/edit/${userId}`, {
         headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Ошибка при загрузке данных пользователя');
+        }
+        return response.json();
+    })
     .then(user => {
         document.getElementById('userId').value = user.id;
         document.getElementById('plotNumber').textContent = user.plot_number;
@@ -51,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
             phone: document.getElementById('phone').value
         };
 
-        fetch(`/api/users-management/${userId}`, {
+        fetch(`/api/users/edit/${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -59,7 +64,12 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify(userData)
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Ошибка при обновлении данных');
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 alert('Данные успешно обновлены');
@@ -77,13 +87,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Обработка отключения Viber
     document.getElementById('disconnectViber').addEventListener('click', function() {
         if (confirm('Вы уверены, что хотите отключить Viber для этого пользователя?')) {
-            fetch(`/api/users-management/${userId}/disconnect-viber`, {
+            fetch(`/api/users/${userId}/disconnect-viber`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Ошибка при отключении Viber');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     alert('Viber успешно отключен');

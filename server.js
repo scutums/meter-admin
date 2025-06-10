@@ -291,38 +291,46 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
 });
 
 app.get("/api/users/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
   try {
-    const [rows] = await db.query("SELECT id, plot_number, full_name, phone FROM users WHERE id = ?", [id]);
-    if (rows.length === 0) return res.status(404).json({ message: "Пользователь не найден" });
-    res.json(rows[0]);
+    const [users] = await db.query(`
+      SELECT 
+        id,
+        plot_number,
+        full_name,
+        phone,
+        viber_id,
+        notifications_enabled,
+        reminder_day,
+        viber_details
+      FROM users 
+      WHERE id = ?
+    `, [req.params.id]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json(users[0]);
   } catch (err) {
-    res.status(500).json({ error: "Ошибка базы данных", details: err.message });
+    console.error("Ошибка при получении данных пользователя:", err);
+    res.status(500).json({ error: "Ошибка при получении данных пользователя" });
   }
 });
 
 app.put("/api/users/:id", authMiddleware, async (req, res) => {
   try {
-    const userId = req.params.id;
     const { full_name, phone } = req.body;
+    
+    await db.query(`
+      UPDATE users 
+      SET full_name = ?, phone = ?
+      WHERE id = ?
+    `, [full_name, phone, req.params.id]);
 
-    if (!full_name) {
-      return res.status(400).json({ error: "ФИО обязательно для заполнения" });
-    }
-
-    const [result] = await db.query(
-      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
-      [full_name, phone, userId]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    res.json({ message: "Данные успешно обновлены" });
+    res.json({ success: true });
   } catch (err) {
-    console.error("Ошибка при обновлении пользователя:", err);
-    res.status(500).json({ error: "Database error", details: err.message });
+    console.error("Ошибка при обновлении данных пользователя:", err);
+    res.status(500).json({ error: "Ошибка при обновлении данных пользователя" });
   }
 });
 
@@ -552,26 +560,19 @@ app.get('/bot-actions', (req, res) => {
 
 app.post("/api/users/:id/disconnect-viber", authMiddleware, async (req, res) => {
   try {
-    const userId = req.params.id;
+    await db.query(`
+      UPDATE users 
+      SET viber_id = NULL, 
+          notifications_enabled = false, 
+          reminder_day = NULL, 
+          viber_details = NULL
+      WHERE id = ?
+    `, [req.params.id]);
 
-    const [result] = await db.query(
-      `UPDATE users 
-       SET viber_id = NULL,
-           notifications_enabled = 1,
-           reminder_day = 25,
-           viber_details = NULL
-       WHERE id = ?`,
-      [userId]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    res.json({ message: "Пользователь успешно отключен от Viber" });
+    res.json({ success: true });
   } catch (err) {
-    console.error("Ошибка при отключении пользователя от Viber:", err);
-    res.status(500).json({ error: "Database error", details: err.message });
+    console.error("Ошибка при отключении Viber:", err);
+    res.status(500).json({ error: "Ошибка при отключении Viber" });
   }
 });
 
@@ -596,6 +597,55 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Ошибка в /api/users-management:", err);
     res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
+// Получение данных конкретного пользователя для редактирования
+app.get("/api/users/edit/:id", authMiddleware, async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT 
+        id,
+        plot_number,
+        full_name,
+        phone
+      FROM users 
+      WHERE id = ?
+    `, [req.params.id]);
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json(users[0]);
+  } catch (err) {
+    console.error("Ошибка при получении данных пользователя:", err);
+    res.status(500).json({ error: "Ошибка при получении данных пользователя" });
+  }
+});
+
+// Обновление данных пользователя
+app.put("/api/users/edit/:id", authMiddleware, async (req, res) => {
+  try {
+    const { full_name, phone } = req.body;
+    
+    if (!full_name) {
+      return res.status(400).json({ error: "ФИО обязательно для заполнения" });
+    }
+
+    const [result] = await db.query(
+      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
+      [full_name, phone, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    res.json({ success: true, message: "Данные успешно обновлены" });
+  } catch (err) {
+    console.error("Ошибка при обновлении данных пользователя:", err);
+    res.status(500).json({ error: "Ошибка при обновлении данных пользователя" });
   }
 });
 
