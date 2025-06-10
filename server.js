@@ -589,6 +589,36 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
   }
 });
 
+// Переключение статуса уведомлений
+app.post("/api/users/:id/toggle-notifications", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Получаем текущий статус
+    const [settings] = await db.query(
+      "SELECT notifications_enabled FROM users WHERE id = ?",
+      [userId]
+    );
+
+    if (settings.length === 0) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    const newStatus = !settings[0].notifications_enabled;
+
+    // Обновляем статус
+    await db.query(
+      "UPDATE users SET notifications_enabled = ? WHERE id = ?",
+      [newStatus, userId]
+    );
+
+    res.json({ notifications_enabled: newStatus });
+  } catch (err) {
+    console.error("Ошибка при изменении статуса уведомлений:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
 });
