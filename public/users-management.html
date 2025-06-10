@@ -26,9 +26,10 @@
                         <th>№ участка</th>
                         <th>ФИО</th>
                         <th>Телефон</th>
-                        <th>Viber</th>
-                        <th>Напоминание</th>
-                        <th>Дней до напоминания</th>
+                        <th>Viber ID</th>
+                        <th>Уведомления</th>
+                        <th>День напоминания</th>
+                        <th>Детали Viber</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -61,6 +62,22 @@
                         <div class="mb-3">
                             <label for="editPhone" class="form-label">Телефон</label>
                             <input type="tel" class="form-control" id="editPhone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editViberId" class="form-label">Viber ID</label>
+                            <input type="text" class="form-control" id="editViberId">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editNotificationsEnabled">
+                                <label class="form-check-label" for="editNotificationsEnabled">
+                                    Включить уведомления
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editReminderDay" class="form-label">День напоминания</label>
+                            <input type="number" class="form-control" id="editReminderDay" min="1" max="31">
                         </div>
                     </form>
                 </div>

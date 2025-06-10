@@ -77,136 +77,20 @@ function getMonthRange(month) {
 
 app.get("/api/users", authMiddleware, async (req, res) => {
   try {
-    const { month } = req.query;
-    let rows;
-    const sqlPeriod = `
+    const [rows] = await db.query(`
       SELECT 
-        u.id,
-        u.plot_number,
-        u.full_name,
-        u.phone,
-        r_last.id as reading_id,
-        r_last.value AS last_reading,
-        r_last.reading_date AS last_reading_date,
-        r_prev.value AS prev_reading,
-        r_prev.reading_date AS prev_reading_date,
-        (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
-        p.payment_date AS paid_date,
-        p.paid_reading AS paid_kwh,
-        p.id as payment_id,
-        CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as viber_registered,
-        CASE WHEN v.reminder_enabled = 1 THEN 1 ELSE 0 END as reminder_enabled,
-        CASE 
-          WHEN v.reminder_enabled = 1 AND v.reminder_days IS NOT NULL 
-          THEN v.reminder_days 
-          ELSE NULL 
-        END as days_until_reminder
-      FROM users u
-      INNER JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS max_date
-          FROM readings
-          WHERE reading_date BETWEEN ? AND ?
-          GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
-      ) r_last ON u.id = r_last.user_id
-      LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS prev_date
-          FROM readings
-          WHERE (user_id, reading_date) NOT IN (
-            SELECT user_id, MAX(reading_date)
-            FROM readings
-            WHERE reading_date BETWEEN ? AND ?
-            GROUP BY user_id
-          )
-          GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
-      ) r_prev ON u.id = r_prev.user_id
-      LEFT JOIN (
-        SELECT p1.*
-        FROM payments p1
-        INNER JOIN (
-          SELECT user_id, MAX(payment_date) AS max_date
-          FROM payments
-          WHERE payment_date BETWEEN ? AND ?
-          GROUP BY user_id
-        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
-      ) p ON u.id = p.user_id
-      LEFT JOIN viber_users v ON u.id = v.user_id
-      ORDER BY u.plot_number
-    `;
-    const sqlAll = `
-      SELECT 
-        u.id,
-        u.plot_number,
-        u.full_name,
-        u.phone,
-        r_last.id as reading_id,
-        r_last.value AS last_reading,
-        r_last.reading_date AS last_reading_date,
-        r_prev.value AS prev_reading,
-        r_prev.reading_date AS prev_reading_date,
-        (r_last.value - IFNULL(r_prev.value, 0)) AS consumption,
-        p.payment_date AS paid_date,
-        p.paid_reading AS paid_kwh,
-        p.id as payment_id,
-        CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as viber_registered,
-        CASE WHEN v.reminder_enabled = 1 THEN 1 ELSE 0 END as reminder_enabled,
-        CASE 
-          WHEN v.reminder_enabled = 1 AND v.reminder_days IS NOT NULL 
-          THEN v.reminder_days 
-          ELSE NULL 
-        END as days_until_reminder
-      FROM users u
-      LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS max_date
-          FROM readings
-          GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
-      ) r_last ON u.id = r_last.user_id
-      LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS prev_date
-          FROM readings
-          WHERE (user_id, reading_date) NOT IN (
-            SELECT user_id, MAX(reading_date)
-            FROM readings
-            GROUP BY user_id
-          )
-          GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.prev_date
-      ) r_prev ON u.id = r_prev.user_id
-      LEFT JOIN (
-        SELECT p1.*
-        FROM payments p1
-        INNER JOIN (
-          SELECT user_id, MAX(payment_date) AS max_date
-          FROM payments
-          GROUP BY user_id
-        ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
-      ) p ON u.id = p.user_id
-      LEFT JOIN viber_users v ON u.id = v.user_id
-      ORDER BY u.plot_number
-    `;
-    if (month) {
-      const { from, to } = getMonthRange(month);
-      [rows] = await db.query(sqlPeriod, [from, to, from, to, from, to]);
-      if (!rows || rows.length === 0) {
-        return res.status(404).json({ error: `За выбранный период (${month}) данные отсутствуют.` });
-      }
-    } else {
-      [rows] = await db.query(sqlAll);
-    }
+        id,
+        plot_number,
+        full_name,
+        phone,
+        viber_id,
+        notifications_enabled,
+        reminder_day,
+        viber_details
+      FROM users 
+      ORDER BY plot_number
+    `);
+    
     res.json(rows);
   } catch (err) {
     console.error("Ошибка в /api/users:", err);

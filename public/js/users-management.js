@@ -58,14 +58,15 @@ async function loadUsers() {
                 <td>${user.plot_number}</td>
                 <td>${user.full_name}</td>
                 <td>${user.phone || '-'}</td>
+                <td>${user.viber_id || '-'}</td>
                 <td class="text-center">
-                    ${user.viber_registered ? '✅' : '❌'}
+                    ${user.notifications_enabled ? '✅' : '❌'}
                 </td>
                 <td class="text-center">
-                    ${user.reminder_enabled ? '✅' : '❌'}
+                    ${user.reminder_day || '-'}
                 </td>
-                <td class="text-center">
-                    ${user.days_until_reminder !== null ? user.days_until_reminder : '-'}
+                <td>
+                    ${user.viber_details ? JSON.stringify(user.viber_details) : '-'}
                 </td>
                 <td class="text-center">
                     <button class="btn btn-sm btn-primary edit-user" data-user-id="${user.id}">
@@ -93,11 +94,17 @@ function openEditModal(userId) {
     const plotNumber = user.cells[0].textContent;
     const fullName = user.cells[1].textContent;
     const phone = user.cells[2].textContent;
+    const viberId = user.cells[3].textContent;
+    const notificationsEnabled = user.cells[4].textContent.includes('✅');
+    const reminderDay = user.cells[5].textContent;
 
     document.getElementById('editUserId').value = userId;
     document.getElementById('editPlotNumber').value = plotNumber;
     document.getElementById('editFullName').value = fullName;
     document.getElementById('editPhone').value = phone;
+    document.getElementById('editViberId').value = viberId === '-' ? '' : viberId;
+    document.getElementById('editNotificationsEnabled').checked = notificationsEnabled;
+    document.getElementById('editReminderDay').value = reminderDay === '-' ? '' : reminderDay;
 
     const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
     modal.show();
@@ -108,6 +115,9 @@ async function saveUserChanges() {
     const userId = document.getElementById('editUserId').value;
     const fullName = document.getElementById('editFullName').value;
     const phone = document.getElementById('editPhone').value;
+    const viberId = document.getElementById('editViberId').value;
+    const notificationsEnabled = document.getElementById('editNotificationsEnabled').checked;
+    const reminderDay = document.getElementById('editReminderDay').value;
 
     try {
         const response = await fetch(`/api/users/${userId}`, {
@@ -118,7 +128,10 @@ async function saveUserChanges() {
             },
             body: JSON.stringify({
                 full_name: fullName,
-                phone: phone
+                phone: phone,
+                viber_id: viberId || null,
+                notifications_enabled: notificationsEnabled,
+                reminder_day: reminderDay ? parseInt(reminderDay) : null
             })
         });
 
