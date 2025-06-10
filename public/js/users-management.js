@@ -42,8 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Ошибка: ' + data.error);
             } else {
                 alert('Данные успешно обновлены');
-                const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
-                modal.hide();
+                hideEditForm();
                 loadUsers();
             }
         })
@@ -120,8 +119,14 @@ function editUser(id, fullName, phone) {
     document.getElementById('editUserId').value = id;
     document.getElementById('editFullName').value = fullName;
     document.getElementById('editPhone').value = phone;
-    const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
-    modal.show();
+    document.getElementById('editFormContainer').style.display = 'block';
+    // Прокручиваем к форме
+    document.getElementById('editFormContainer').scrollIntoView({ behavior: 'smooth' });
+}
+
+function hideEditForm() {
+    document.getElementById('editFormContainer').style.display = 'none';
+    document.getElementById('editUserForm').reset();
 }
 
 function disconnectViber(userId) {
