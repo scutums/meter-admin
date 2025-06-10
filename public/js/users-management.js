@@ -39,7 +39,12 @@ async function loadNavbar() {
 // Загружает список пользователей
 async function loadUsers() {
     try {
-        const response = await fetch("/api/users-management");
+        const token = localStorage.getItem('token');
+        const response = await fetch("/api/users-management", {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
         if (!response.ok) {
             throw new Error("Ошибка загрузки данных");
         }
