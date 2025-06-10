@@ -49,7 +49,7 @@ async function loadUsers() {
             throw new Error("Ошибка загрузки данных");
         }
         const users = await response.json();
-        const tbody = document.querySelector("#usersTable tbody");
+        const tbody = document.getElementById("usersTableBody");
         tbody.innerHTML = "";
         
         users.forEach(user => {
@@ -61,7 +61,6 @@ async function loadUsers() {
                 <td>${user.viber_id || '-'}</td>
                 <td>${user.notifications_enabled ? 'Да' : 'Нет'}</td>
                 <td>${user.reminder_day || '-'}</td>
-                <td>${user.viber_details || '-'}</td>
                 <td>
                     <button class="btn btn-sm btn-primary edit-btn" data-id="${user.id}">
                         <i class="fas fa-edit"></i>
