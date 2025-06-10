@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const fullName = document.getElementById('editFullName').value;
         const phone = document.getElementById('editPhone').value;
 
-        fetch(`/api/users/${userId}`, {
+        fetch(`/api/users-management/update/${userId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -75,7 +75,7 @@ function updateUsername() {
 
 function loadUsers() {
     const token = localStorage.getItem("token");
-    fetch('/api/users/users-management', {
+    fetch('/api/users-management/list', {
         headers: {
             'Authorization': `Bearer ${token}`
         }
@@ -132,7 +132,7 @@ function hideEditForm() {
 function disconnectViber(userId) {
     if (confirm('Вы уверены, что хотите отключить пользователя от Viber?')) {
         const token = localStorage.getItem("token");
-        fetch(`/api/users/${userId}/disconnect-viber`, {
+        fetch(`/api/users-management/disconnect-viber/${userId}`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
