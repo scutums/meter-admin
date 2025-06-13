@@ -153,7 +153,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY u.plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `;
     const sqlAll = `
       SELECT 
@@ -203,7 +203,7 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY u.plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `;
     if (month) {
       const { from, to } = getMonthRange(month);
@@ -395,7 +395,7 @@ app.get("/api/last-readings", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
       ) r ON u.id = r.user_id
-      ORDER BY u.plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `);
     res.json(rows);
   } catch (err) {
@@ -425,7 +425,7 @@ app.get("/api/last-payments", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY u.plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `);
     res.json(rows);
   } catch (err) {
@@ -445,7 +445,7 @@ app.get("/api/readings", authMiddleware, async (req, res) => {
       FROM readings r
       JOIN users u ON r.user_id = u.id
       WHERE r.reading_date BETWEEN ? AND ?
-      ORDER BY u.plot_number, r.reading_date
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number, r.reading_date
     `, [from, to]);
     res.json(rows);
   } catch (err) {
@@ -479,7 +479,8 @@ app.get("/api/user-payments/:id", authMiddleware, async (req, res) => {
          (SELECT value FROM tariff WHERE effective_date <= p.payment_date ORDER BY effective_date DESC LIMIT 1) AS tariff
        FROM payments p
        WHERE p.user_id = ?
-       ORDER BY p.payment_date DESC`,
+       ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+    `,
       [id]
     );
     res.json(rows);
@@ -533,7 +534,7 @@ app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY u.plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `);
     res.json(rows);
   } catch (err) {
@@ -602,7 +603,7 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
         reminder_day,
         viber_details
       FROM users 
-      ORDER BY plot_number
+      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
     `);
     
     res.json(rows);
