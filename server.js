@@ -8,6 +8,7 @@ import { dirname } from "path";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
+import PDFDocument from "pdfkit";
 
 dotenv.config();
 
@@ -586,6 +587,234 @@ app.get("/api/users-management", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Ошибка в /api/users-management:", err);
     res.status(500).json({ error: "Database error", details: err.message });
+  }
+});
+
+// Функция для генерации PDF с показаниями
+async function generateReadingsPDF(userId, db) {
+  const [user] = await db.query("SELECT plot_number, full_name FROM users WHERE id = ?", [userId]);
+  const [readings] = await db.query(
+    "SELECT reading_date, value FROM readings WHERE user_id = ? ORDER BY reading_date DESC",
+    [userId]
+  );
+
+  const doc = new PDFDocument();
+  const buffers = [];
+  doc.on('data', buffers.push.bind(buffers));
+  
+  // Заголовок
+  doc.fontSize(20).text('Отчет по показаниям счетчика', { align: 'center' });
+  doc.moveDown();
+  
+  // Информация о пользователе
+  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
+  doc.text(`ФИО: ${user[0].full_name}`);
+  doc.moveDown();
+  
+  // Таблица показаний
+  doc.fontSize(12).text('История показаний:', { underline: true });
+  doc.moveDown();
+  
+  // Заголовки таблицы
+  const tableTop = doc.y;
+  doc.text('Дата', 50, tableTop);
+  doc.text('Показание', 250, tableTop);
+  doc.moveDown();
+  
+  // Данные таблицы
+  readings.forEach(reading => {
+    const date = new Date(reading.reading_date).toLocaleDateString('ru-RU');
+    doc.text(date, 50, doc.y);
+    doc.text(reading.value.toString(), 250, doc.y);
+    doc.moveDown();
+  });
+  
+  doc.end();
+  
+  return new Promise((resolve, reject) => {
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      resolve(pdfData);
+    });
+    doc.on('error', reject);
+  });
+}
+
+// Функция для генерации PDF с оплатами
+async function generatePaymentsPDF(userId, db) {
+  const [user] = await db.query("SELECT plot_number, full_name FROM users WHERE id = ?", [userId]);
+  const [payments] = await db.query(
+    "SELECT payment_date, paid_reading, tariff, debt FROM payments WHERE user_id = ? ORDER BY payment_date DESC",
+    [userId]
+  );
+
+  const doc = new PDFDocument();
+  const buffers = [];
+  doc.on('data', buffers.push.bind(buffers));
+  
+  // Заголовок
+  doc.fontSize(20).text('Отчет по оплатам', { align: 'center' });
+  doc.moveDown();
+  
+  // Информация о пользователе
+  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
+  doc.text(`ФИО: ${user[0].full_name}`);
+  doc.moveDown();
+  
+  // Таблица оплат
+  doc.fontSize(12).text('История оплат:', { underline: true });
+  doc.moveDown();
+  
+  // Заголовки таблицы
+  const tableTop = doc.y;
+  doc.text('Дата', 50, tableTop);
+  doc.text('Оплачено (кВт⋅ч)', 150, tableTop);
+  doc.text('Тариф', 250, tableTop);
+  doc.text('Сумма', 350, tableTop);
+  doc.text('Долг', 450, tableTop);
+  doc.moveDown();
+  
+  // Данные таблицы
+  payments.forEach(payment => {
+    const date = new Date(payment.payment_date).toLocaleDateString('ru-RU');
+    const sum = payment.paid_reading && payment.tariff ? (payment.paid_reading * payment.tariff).toFixed(2) : '-';
+    doc.text(date, 50, doc.y);
+    doc.text(payment.paid_reading?.toString() || '-', 150, doc.y);
+    doc.text(payment.tariff?.toString() || '-', 250, doc.y);
+    doc.text(sum, 350, doc.y);
+    doc.text(payment.debt?.toString() || '-', 450, doc.y);
+    doc.moveDown();
+  });
+  
+  doc.end();
+  
+  return new Promise((resolve, reject) => {
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      resolve(pdfData);
+    });
+    doc.on('error', reject);
+  });
+}
+
+// Функция для генерации полного PDF-отчета
+async function generateFullReportPDF(userId, db) {
+  const [user] = await db.query("SELECT plot_number, full_name, phone, has_viber FROM users WHERE id = ?", [userId]);
+  const [readings] = await db.query(
+    "SELECT reading_date, value FROM readings WHERE user_id = ? ORDER BY reading_date DESC",
+    [userId]
+  );
+  const [payments] = await db.query(
+    "SELECT payment_date, paid_reading, tariff, debt FROM payments WHERE user_id = ? ORDER BY payment_date DESC",
+    [userId]
+  );
+
+  const doc = new PDFDocument();
+  const buffers = [];
+  doc.on('data', buffers.push.bind(buffers));
+  
+  // Заголовок
+  doc.fontSize(20).text('Полный отчет', { align: 'center' });
+  doc.moveDown();
+  
+  // Информация о пользователе
+  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
+  doc.text(`ФИО: ${user[0].full_name}`);
+  doc.text(`Телефон: ${user[0].phone || '-'}`);
+  doc.text(`Viber: ${user[0].has_viber ? 'Зарегистрирован' : 'Не зарегистрирован'}`);
+  doc.moveDown();
+  
+  // Показания
+  doc.fontSize(14).text('История показаний:', { underline: true });
+  doc.moveDown();
+  
+  const readingsTableTop = doc.y;
+  doc.fontSize(12);
+  doc.text('Дата', 50, readingsTableTop);
+  doc.text('Показание', 250, readingsTableTop);
+  doc.moveDown();
+  
+  readings.forEach(reading => {
+    const date = new Date(reading.reading_date).toLocaleDateString('ru-RU');
+    doc.text(date, 50, doc.y);
+    doc.text(reading.value.toString(), 250, doc.y);
+    doc.moveDown();
+  });
+  
+  doc.addPage();
+  
+  // Оплаты
+  doc.fontSize(14).text('История оплат:', { underline: true });
+  doc.moveDown();
+  
+  const paymentsTableTop = doc.y;
+  doc.fontSize(12);
+  doc.text('Дата', 50, paymentsTableTop);
+  doc.text('Оплачено (кВт⋅ч)', 150, paymentsTableTop);
+  doc.text('Тариф', 250, paymentsTableTop);
+  doc.text('Сумма', 350, paymentsTableTop);
+  doc.text('Долг', 450, paymentsTableTop);
+  doc.moveDown();
+  
+  payments.forEach(payment => {
+    const date = new Date(payment.payment_date).toLocaleDateString('ru-RU');
+    const sum = payment.paid_reading && payment.tariff ? (payment.paid_reading * payment.tariff).toFixed(2) : '-';
+    doc.text(date, 50, doc.y);
+    doc.text(payment.paid_reading?.toString() || '-', 150, doc.y);
+    doc.text(payment.tariff?.toString() || '-', 250, doc.y);
+    doc.text(sum, 350, doc.y);
+    doc.text(payment.debt?.toString() || '-', 450, doc.y);
+    doc.moveDown();
+  });
+  
+  doc.end();
+  
+  return new Promise((resolve, reject) => {
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      resolve(pdfData);
+    });
+    doc.on('error', reject);
+  });
+}
+
+// Добавляем новые эндпоинты для PDF
+app.get("/api/user-readings/:id/pdf", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const pdfData = await generateReadingsPDF(userId, db);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=readings_${userId}.pdf`);
+    res.send(pdfData);
+  } catch (err) {
+    console.error("Ошибка при генерации PDF показаний:", err);
+    res.status(500).json({ error: "Ошибка при формировании отчета" });
+  }
+});
+
+app.get("/api/user-payments/:id/pdf", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const pdfData = await generatePaymentsPDF(userId, db);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=payments_${userId}.pdf`);
+    res.send(pdfData);
+  } catch (err) {
+    console.error("Ошибка при генерации PDF оплат:", err);
+    res.status(500).json({ error: "Ошибка при формировании отчета" });
+  }
+});
+
+app.get("/api/user-report/:id/pdf", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const pdfData = await generateFullReportPDF(userId, db);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=full_report_${userId}.pdf`);
+    res.send(pdfData);
+  } catch (err) {
+    console.error("Ошибка при генерации полного PDF:", err);
+    res.status(500).json({ error: "Ошибка при формировании отчета" });
   }
 });
 
