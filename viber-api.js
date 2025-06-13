@@ -61,14 +61,12 @@ export default function viberRoutes(db) {
    */
   function getCommandButtons() {
     return [
-      { text: "📋 Инфо", command: "инфо" },           // Информация об участке
+      { text: "📋 Информация", command: "инфо" },     // Информация об участке
       { text: "📊 Показания", command: "показания" }, // Показания счетчика
       { text: "💰 История оплат", command: "оплата" }, // История оплат
       { text: "💳 Реквизиты", command: "реквизиты" }, // Реквизиты для оплаты
       { text: "📈 Расход", command: "расход" },       // Расход электроэнергии
       { text: "🔔 Уведомления", command: "уведомления" }, // Настройка уведомлений
-      { text: "⏰ Напоминание", command: "напоминание" }, // Настройка напоминаний
-      { text: "📱 Телефон", command: "телефон" },     // Информация о телефоне
       { text: "❌ Отвязать", command: "отвязать" },    // Отвязка Viber от участка
       { text: "❓ Помощь", command: "помощь" }         // Справка по командам
     ];
@@ -257,8 +255,6 @@ export default function viberRoutes(db) {
 💳 реквизиты - реквизиты для оплаты
 📈 расход - расход электроэнергии
 🔔 уведомления - настройка уведомлений
-⏰ напоминание - настройка напоминаний
-📱 телефон - показать привязанный номер телефона
 ❌ отвязать - отвязать Viber от участка
 ❓ помощь - показать это сообщение`;
               await sendViberMessage(viber_id, helpMessage, getCommandButtons());
@@ -269,26 +265,38 @@ export default function viberRoutes(db) {
               );
               break;
 
-            case "телефон":
-              // Отправка информации о привязанном телефоне
-              if (user.phone) {
-                await sendViberMessage(
-                  viber_id,
-                  `Ваш привязанный номер телефона: ${user.phone}`,
-                  getCommandButtons()
-                );
-              } else {
-                await sendViberMessage(
-                  viber_id,
-                  "У вас не привязан номер телефона в системе.",
-                  getCommandButtons()
+            case "инфо":
+              // Получаем информацию о пользователе
+              const [userInfo] = await db.query(
+                `SELECT u.*, 
+                        (SELECT value FROM readings WHERE user_id = u.id ORDER BY reading_date DESC LIMIT 1) as last_reading,
+                        (SELECT payment_date FROM payments WHERE user_id = u.id ORDER BY payment_date DESC LIMIT 1) as last_payment_date,
+                        (SELECT paid_reading FROM payments WHERE user_id = u.id ORDER BY payment_date DESC LIMIT 1) as last_payment
+                 FROM users u 
+                 WHERE u.id = ?`,
+                [user.id]
+              );
+
+              if (userInfo.length > 0) {
+                const info = userInfo[0];
+                const message = `📋 Информация по участку ${info.plot_number}:
+
+👤 ФИО: ${info.full_name}
+📱 Телефон: ${info.phone || 'Не указан'}
+📊 Последнее показание: ${info.last_reading || 'Нет данных'}
+💰 Последняя оплата: ${info.last_payment ? `${info.last_payment} кВт⋅ч (${new Date(info.last_payment_date).toLocaleDateString('ru-RU')})` : 'Нет данных'}`;
+
+                await sendViberMessage(viber_id, message, getCommandButtons());
+                await db.query(
+                  `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                   VALUES (?, ?, ?)`,
+                  [viber_id, 'info_request', 'Запрос информации по участку']
                 );
               }
-              await db.query(
-                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                 VALUES (?, ?, ?)`,
-                [viber_id, 'phone_check', 'Проверка привязанного номера телефона']
-              );
+              break;
+
+            case "телефон":
+              // Удаляем обработку команды "телефон", так как она теперь включена в "инфо"
               break;
 
             case "расход":
@@ -372,34 +380,6 @@ export default function viberRoutes(db) {
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
                  VALUES (?, ?, ?)`,
                 [viber_id, 'reminder_request', `Запрос настройки напоминаний`]
-              );
-              break;
-
-            case "инфо":
-              // Получение и отправка общей информации об участке
-              const [[tariffRow]] = await db.query(
-                `SELECT value FROM tariff ORDER BY effective_date DESC LIMIT 1`
-              );
-              const tariff = tariffRow?.value || 4.75;
-
-              const [[lastPayment]] = await db.query(
-                `SELECT payment_date, paid_reading, debt, 
-                  (SELECT value FROM tariff WHERE effective_date <= payment_date ORDER BY effective_date DESC LIMIT 1) as tariff
-                 FROM payments WHERE user_id = ? ORDER BY payment_date DESC LIMIT 1`,
-                [user.id]
-              );
-
-              const debt = lastPayment ? lastPayment.debt : null;
-              const message = `Информация по участку ${user.plot_number}:
-👤 Владелец: ${user.full_name}
-💰 Долг: ${debt ?? 'нет данных'}
-💵 Текущий тариф: ${tariff} грн/кВт⋅ч`;
-              
-              await sendViberMessage(viber_id, message, getCommandButtons());
-              await db.query(
-                `INSERT INTO bot_actions (viber_id, action_type, action_data) 
-                 VALUES (?, ?, ?)`,
-                [viber_id, 'info_request', `Запрос информации по участку ${user.plot_number}`]
               );
               break;
 

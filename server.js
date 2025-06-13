@@ -1003,78 +1003,32 @@ app.get("/api/user-report/:id/pdf", authMiddleware, async (req, res) => {
   }
 });
 
-// Функция для отправки напоминаний
-async function sendReminders() {
+// Удаляем функцию отправки напоминаний и её вызов
+// Удаляем обработчик напоминаний
+app.post("/api/users/:id/set-reminder", authMiddleware, async (req, res) => {
   try {
-    const today = new Date();
-    const currentDay = today.getDate();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
+    const userId = req.params.id;
+    const { reminder_day } = req.body;
 
-    // Получаем пользователей, у которых сегодня день напоминания
-    const [users] = await db.query(
-      `SELECT u.id, u.viber_id, u.plot_number, u.reminder_day 
-       FROM users u 
-       WHERE u.reminder_day = ? 
-       AND u.viber_id IS NOT NULL 
-       AND u.notifications_enabled = 1`,
-      [currentDay]
+    if (!reminder_day || reminder_day < 1 || reminder_day > 28) {
+      return res.status(400).json({ error: "Invalid reminder day" });
+    }
+
+    const [result] = await db.query(
+      "UPDATE users SET reminder_day = ? WHERE id = ?",
+      [reminder_day, userId]
     );
 
-    for (const user of users) {
-      // Проверяем, есть ли уже показания за текущий месяц
-      const [readings] = await db.query(
-        `SELECT id FROM readings 
-         WHERE user_id = ? 
-         AND MONTH(reading_date) = ? 
-         AND YEAR(reading_date) = ?`,
-        [user.id, currentMonth + 1, currentYear]
-      );
-
-      // Если показаний еще нет, отправляем напоминание
-      if (readings.length === 0) {
-        const message = `⏰ Напоминание по участку ${user.plot_number}:
-
-❗️ Пожалуйста, не забудьте передать показания счетчика за текущий месяц.
-
-Для передачи показаний используйте команду "показания" в меню бота.`;
-
-        try {
-          await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/send-message`, {
-            viber_id: user.viber_id,
-            message: message
-          });
-
-          // Логируем отправку напоминания
-          await db.query(
-            `INSERT INTO notifications (user_id, message, via, success) 
-             VALUES (?, ?, 'viber', true)`,
-            [user.id, `Отправлено напоминание о передаче показаний`]
-          );
-        } catch (err) {
-          console.error(`Error sending reminder to user ${user.id}:`, err);
-          
-          // Логируем ошибку отправки
-          await db.query(
-            `INSERT INTO notifications (user_id, message, via, success) 
-             VALUES (?, ?, 'viber', false)`,
-            [user.id, `Ошибка отправки напоминания: ${err.message}`]
-          );
-        }
-      }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "User not found" });
     }
-  } catch (err) {
-    console.error("Error in sendReminders:", err);
-  }
-}
 
-// Запускаем отправку напоминаний каждый день в 9:00
-setInterval(() => {
-  const now = new Date();
-  if (now.getHours() === 9 && now.getMinutes() === 0) {
-    sendReminders();
+    res.json({ message: "Reminder day updated successfully" });
+  } catch (err) {
+    console.error("Error updating reminder day:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
-}, 60000); // Проверяем каждую минуту
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
