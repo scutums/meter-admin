@@ -33,18 +33,17 @@
         <label for="period-month" class="form-label">Месяц</label>
         <input type="month" id="period-month" class="form-control" required />
       </div>
-      <div class="col-md-3 align-self-end">
-        <button type="submit" class="btn btn-primary">Показать</button>
-      </div>
-    </form>
-    <div class="row mb-3">
       <div class="col-md-4">
+        <label for="search-input" class="form-label">Поиск</label>
         <div class="input-group">
           <span class="input-group-text">🔍</span>
           <input type="text" id="search-input" class="form-control" placeholder="Поиск по участку или ФИО..." />
         </div>
       </div>
-    </div>
+      <div class="col-md-2 align-self-end">
+        <button type="submit" class="btn btn-primary">Показать</button>
+      </div>
+    </form>
     <div class="table-responsive">
       <table class="table table-bordered table-hover" id="payments-table">
         <thead class="table-light">
