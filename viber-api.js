@@ -908,6 +908,7 @@ export default function viberRoutes(db) {
    */
   router.post("/notify-payment", async (req, res) => {
     try {
+      console.log('Received payment notification request:', req.body);
       const { user_id, payment_date, paid_reading, tariff } = req.body;
       
       // Получаем информацию о пользователе
@@ -915,6 +916,8 @@ export default function viberRoutes(db) {
         "SELECT viber_id, notifications_enabled, plot_number FROM users WHERE id = ?",
         [user_id]
       );
+
+      console.log('User info for notification:', users[0]);
 
       // Отправляем уведомление, если пользователь подписан и включил уведомления
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
@@ -927,7 +930,19 @@ export default function viberRoutes(db) {
 💰 Тариф: ${tariff} грн/кВт⋅ч
 
 Для просмотра истории оплат используйте команду "история оплат"`;
+
+        console.log('Sending Viber message:', message);
         await sendViberMessage(users[0].viber_id, message, getCommandButtons());
+        console.log('Viber message sent successfully');
+
+        // Логируем отправку уведомления
+        await db.query(
+          `INSERT INTO notifications (user_id, message, via, success) 
+           VALUES (?, ?, 'viber', true)`,
+          [user_id, `Отправлено уведомление о новой оплате`]
+        );
+      } else {
+        console.log('Skipping notification - user not configured or notifications disabled');
       }
 
       res.json({ status: "ok" });

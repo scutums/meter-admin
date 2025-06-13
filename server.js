@@ -321,15 +321,27 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
 
     // Отправляем уведомление о новой оплате
     try {
-      await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/notify-payment`, {
-        user_id,
-        payment_date,
-        paid_reading,
-        tariff
-      });
-      console.log('Payment notification sent');
+      // Получаем информацию о пользователе для уведомления
+      const [[userInfo]] = await db.query(
+        "SELECT viber_id, notifications_enabled, plot_number FROM users WHERE id = ?",
+        [user_id]
+      );
+
+      if (userInfo && userInfo.viber_id && userInfo.notifications_enabled) {
+        console.log('Sending payment notification to user:', userInfo);
+        await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/notify-payment`, {
+          user_id,
+          payment_date,
+          paid_reading,
+          tariff
+        });
+        console.log('Payment notification sent successfully');
+      } else {
+        console.log('Skipping notification - user not configured:', userInfo);
+      }
     } catch (err) {
       console.error("Error sending payment notification:", err);
+      // Не прерываем выполнение запроса при ошибке уведомления
     }
 
     res.json({ 
