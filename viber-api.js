@@ -407,7 +407,7 @@ export default function viberRoutes(db) {
                  FROM readings 
                  WHERE user_id = ? 
                  ORDER BY reading_date DESC 
-                 LIMIT 3`,
+                 LIMIT 6`,
                 [user.id]
               );
 
