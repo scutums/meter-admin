@@ -13,7 +13,12 @@
     <div id="user-info" class="mb-4"></div>
     <div class="row">
       <div class="col-md-6">
-        <h4>История показаний</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0">История показаний</h4>
+          <button class="btn btn-outline-primary" onclick="generateReadingsPDF()">
+            📄 Скачать отчет
+          </button>
+        </div>
         <table class="table table-bordered table-hover">
           <thead class="table-primary text-center align-middle">
             <tr>
@@ -25,7 +30,12 @@
         </table>
       </div>
       <div class="col-md-6">
-        <h4>История оплат</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0">История оплат</h4>
+          <button class="btn btn-outline-primary" onclick="generatePaymentsPDF()">
+            📄 Скачать отчет
+          </button>
+        </div>
         <table class="table table-bordered table-hover">
           <thead class="table-primary text-center align-middle">
             <tr>
@@ -39,6 +49,11 @@
           <tbody id="payments-table"></tbody>
         </table>
       </div>
+    </div>
+    <div class="text-center mt-4">
+      <button class="btn btn-primary" onclick="generateFullReport()">
+        📄 Скачать полный отчет
+      </button>
     </div>
   </div>
   <script>
@@ -87,46 +102,27 @@
       }
       const u = await res.json();
       document.getElementById("user-info").innerHTML = `
-        <form id="edit-user-form" class="row g-3 mb-3">
+        <div class="row g-3 mb-3">
           <div class="col-md-2">
             <label class="form-label">Участок</label>
             <div class="form-control-plaintext fw-bold fs-5">${u.plot_number}</div>
           </div>
           <div class="col-md-5">
             <label class="form-label">ФИО</label>
-            <input type="text" class="form-control" id="full_name" value="${u.full_name}" required />
+            <div class="form-control-plaintext">${u.full_name}</div>
           </div>
           <div class="col-md-3">
             <label class="form-label">Телефон</label>
-            <input type="text" class="form-control" id="phone" value="${u.phone || ''}" />
+            <div class="form-control-plaintext">${u.phone || '-'}</div>
           </div>
-          <div class="col-md-2 align-self-end">
-            <button type="submit" class="btn btn-primary">Сохранить</button>
+          <div class="col-md-2">
+            <label class="form-label">Viber</label>
+            <div class="form-control-plaintext">
+              ${u.has_viber ? '✅ Зарегистрирован' : '❌ Не зарегистрирован'}
+            </div>
           </div>
-        </form>
-        <div id="user-message"></div>
+        </div>
       `;
-      document.getElementById("edit-user-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const full_name = document.getElementById("full_name").value;
-        const phone = document.getElementById("phone").value;
-        const payload = { full_name, phone };
-        const res = await fetch(`/api/users/${userId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token
-          },
-          body: JSON.stringify(payload)
-        });
-        const msg = document.getElementById("user-message");
-        if (res.ok) {
-          msg.innerHTML = `<div class='alert alert-success'>Данные успешно обновлены</div>`;
-        } else {
-          const err = await res.json();
-          msg.innerHTML = `<div class='alert alert-danger'>Ошибка: ${err.message || 'Не удалось сохранить'}</div>`;
-        }
-      });
     }
 
     async function loadReadings() {
@@ -165,6 +161,63 @@
         `;
         tbody.appendChild(row);
       });
+    }
+
+    async function generateReadingsPDF() {
+      const res = await fetch(`/api/user-readings/${userId}/pdf`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `показания_${userId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+      } else {
+        alert('Ошибка при формировании отчета');
+      }
+    }
+
+    async function generatePaymentsPDF() {
+      const res = await fetch(`/api/user-payments/${userId}/pdf`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `оплаты_${userId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+      } else {
+        alert('Ошибка при формировании отчета');
+      }
+    }
+
+    async function generateFullReport() {
+      const res = await fetch(`/api/user-report/${userId}/pdf`, {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `полный_отчет_${userId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+      } else {
+        alert('Ошибка при формировании отчета');
+      }
     }
 
     loadNavbar();
