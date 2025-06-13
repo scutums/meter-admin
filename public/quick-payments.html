@@ -37,6 +37,14 @@
         <button type="submit" class="btn btn-primary">Показать</button>
       </div>
     </form>
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <div class="input-group">
+          <span class="input-group-text">🔍</span>
+          <input type="text" id="search-input" class="form-control" placeholder="Поиск по участку или ФИО..." />
+        </div>
+      </div>
+    </div>
     <div class="table-responsive">
       <table class="table table-bordered table-hover" id="payments-table">
         <thead class="table-light">
@@ -250,15 +258,52 @@
       const [users, tariffs] = await Promise.all([fetchUserStats(), fetchTariffs()]);
       const tbody = document.getElementById('payments-body');
       tbody.innerHTML = "";
-      users.forEach(user => {
-        if (user.last_reading_date && user.last_reading_date.startsWith(month)) {
-          const tr = createRow(user, tariffs);
-          tbody.appendChild(tr);
-        }
+      
+      // Сохраняем данные для фильтрации
+      window.allUsers = users;
+      window.currentTariffs = tariffs;
+      
+      filterAndDisplayUsers(month);
+    }
+
+    function filterAndDisplayUsers(month, searchText = '') {
+      const tbody = document.getElementById('payments-body');
+      tbody.innerHTML = "";
+      
+      const filteredUsers = window.allUsers.filter(user => {
+        // Фильтр по месяцу
+        const matchesMonth = user.last_reading_date && user.last_reading_date.startsWith(month);
+        
+        // Фильтр по поиску
+        const searchLower = searchText.toLowerCase();
+        const matchesSearch = !searchText || 
+          (user.plot_number && user.plot_number.toLowerCase().includes(searchLower)) ||
+          (user.full_name && user.full_name.toLowerCase().includes(searchLower));
+        
+        return matchesMonth && matchesSearch;
+      });
+
+      filteredUsers.forEach(user => {
+        const tr = createRow(user, window.currentTariffs);
+        tbody.appendChild(tr);
       });
     }
 
-    // Удаление оплаты
+    // Добавляем обработчик поиска
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const month = document.getElementById('period-month').value;
+      filterAndDisplayUsers(month, e.target.value);
+    });
+
+    // Обновляем обработчик формы периода
+    document.getElementById("period-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const month = document.getElementById("period-month").value;
+      const searchText = document.getElementById('search-input').value;
+      filterAndDisplayUsers(month, searchText);
+    });
+
+    // Обновляем обработчик удаления оплаты
     document.addEventListener('click', async (e) => {
       if (e.target.classList.contains('delete-payment')) {
         if (!confirm('Удалить оплату?')) return;
@@ -270,8 +315,9 @@
         });
         if (resp.ok) {
           // Обновить таблицу после удаления оплаты
-          const month = document.getElementById('period-month')?.value;
-          if (typeof init === 'function') init(month);
+          const month = document.getElementById('period-month').value;
+          const searchText = document.getElementById('search-input').value;
+          filterAndDisplayUsers(month, searchText);
         } else {
           alert('Ошибка при удалении оплаты');
         }
