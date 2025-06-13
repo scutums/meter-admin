@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import viberRoutes from "./viber-api.js";
 import PDFDocument from "pdfkit";
+import axios from "axios";
 
 dotenv.config();
 
@@ -908,6 +909,89 @@ app.get("/api/user-report/:id/pdf", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Ошибка при формировании отчета" });
   }
 });
+
+// Функция для отправки напоминаний
+async function sendReminders() {
+  try {
+    const today = new Date();
+    const currentDay = today.getDate();
+
+    // Получаем пользователей, которым нужно отправить напоминание
+    const [users] = await db.query(`
+      SELECT u.id, u.plot_number, u.viber_id, u.notifications_enabled,
+             r_last.value as last_reading,
+             r_last.reading_date as last_reading_date
+      FROM users u
+      LEFT JOIN (
+        SELECT r1.*
+        FROM readings r1
+        INNER JOIN (
+          SELECT user_id, MAX(reading_date) AS max_date
+          FROM readings
+          GROUP BY user_id
+        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
+      ) r_last ON u.id = r_last.user_id
+      WHERE u.reminder_day = ? 
+        AND u.viber_id IS NOT NULL 
+        AND u.notifications_enabled = 1
+    `, [currentDay]);
+
+    console.log(`Found ${users.length} users to send reminders to`);
+
+    for (const user of users) {
+      // Проверяем, было ли показание в текущем месяце
+      const lastReadingDate = user.last_reading_date ? new Date(user.last_reading_date) : null;
+      const isReadingThisMonth = lastReadingDate && 
+                                lastReadingDate.getMonth() === today.getMonth() && 
+                                lastReadingDate.getFullYear() === today.getFullYear();
+
+      if (!isReadingThisMonth) {
+        // Отправляем напоминание через Viber API
+        const message = `⏰ Напоминание!\n\nПожалуйста, не забудьте передать показания счетчика за ${today.toLocaleString('ru-RU', { month: 'long' })}.\n\nПоследнее показание: ${user.last_reading || 'нет данных'}`;
+        
+        try {
+          await axios.post("https://chatapi.viber.com/pa/send_message", {
+            receiver: user.viber_id,
+            type: "text",
+            text: message
+          }, {
+            headers: {
+              "X-Viber-Auth-Token": process.env.VIBER_AUTH_TOKEN || '507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366'
+            }
+          });
+
+          // Логируем отправку напоминания
+          await db.query(
+            `INSERT INTO notifications (user_id, message, via, success) 
+             VALUES (?, ?, 'viber', true)`,
+            [user.id, message]
+          );
+
+          console.log(`Sent reminder to user ${user.plot_number}`);
+        } catch (err) {
+          console.error(`Error sending reminder to user ${user.plot_number}:`, err);
+          
+          // Логируем ошибку
+          await db.query(
+            `INSERT INTO notifications (user_id, message, via, success) 
+             VALUES (?, ?, 'viber', false)`,
+            [user.id, `Failed to send reminder: ${err.message}`]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error in sendReminders:", err);
+  }
+}
+
+// Запускаем проверку напоминаний каждый день в 9:00
+setInterval(() => {
+  const now = new Date();
+  if (now.getHours() === 9 && now.getMinutes() === 0) {
+    sendReminders();
+  }
+}, 60000); // Проверяем каждую минуту
 
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);

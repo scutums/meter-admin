@@ -343,15 +343,15 @@ export default function viberRoutes(db) {
                 [newStatus, user.id]
               );
 
-              await sendViberMessage(
-                viber_id,
-                `Уведомления ${newStatus ? "включены" : "выключены"}.\n\nВы будете получать уведомления о:\n📊 Новых показаниях\n💰 Новых оплатах\n⚠️ Большом расходе`,
-                getCommandButtons()
-              );
+              const notificationMessage = newStatus ? 
+                `✅ Уведомления включены!\n\nВы будете получать уведомления о:\n📊 Новых показаниях\n💰 Новых оплатах\n⏰ Напоминания о передаче показаний\n\nЧтобы отключить уведомления, используйте эту же команду.` :
+                `❌ Уведомления отключены.\n\nВы не будете получать уведомления о:\n📊 Новых показаниях\n💰 Новых оплатах\n⏰ Напоминания о передаче показаний\n\nЧтобы включить уведомления, используйте эту же команду.`;
+
+              await sendViberMessage(viber_id, notificationMessage, getCommandButtons());
               await db.query(
                 `INSERT INTO bot_actions (viber_id, action_type, action_data) 
                  VALUES (?, ?, ?)`,
-                [viber_id, 'notifications_toggle', `Изменение статуса уведомлений на ${newStatus}`]
+                [viber_id, 'notifications_toggle', `Изменение статуса уведомлений на ${newStatus ? 'включены' : 'выключены'}`]
               );
               break;
 
@@ -365,7 +365,7 @@ export default function viberRoutes(db) {
 
               await sendViberMessage(
                 viber_id,
-                `Текущий день напоминания: ${currentDay} число каждого месяца.\n\nДля изменения отправьте число от 1 до 28.`,
+                `Текущий день напоминания: ${currentDay} число каждого месяца.\n\nДля изменения отправьте число от 1 до 28.\n\n❗️ Напоминание будет приходить в 9:00 утра в указанный день, если показания за текущий месяц еще не переданы.`,
                 getRegistrationButtons()
               );
               await db.query(
@@ -499,6 +499,37 @@ export default function viberRoutes(db) {
               break;
 
             default:
+              // Проверяем, является ли сообщение числом для установки дня напоминания
+              if (message_text.match(/^\d+$/)) {
+                const day = parseInt(message_text);
+                if (day >= 1 && day <= 28) {
+                  // Обновляем день напоминания
+                  await db.query(
+                    "UPDATE users SET reminder_day = ? WHERE id = ?",
+                    [day, user.id]
+                  );
+
+                  await sendViberMessage(
+                    viber_id,
+                    `✅ День напоминания установлен на ${day} число каждого месяца.\n\nНапоминание будет приходить в 9:00 утра, если показания за текущий месяц еще не переданы.`,
+                    getCommandButtons()
+                  );
+
+                  await db.query(
+                    `INSERT INTO bot_actions (viber_id, action_type, action_data) 
+                     VALUES (?, ?, ?)`,
+                    [viber_id, 'reminder_set', `Установлен день напоминания: ${day}`]
+                  );
+                } else {
+                  await sendViberMessage(
+                    viber_id,
+                    "❌ Пожалуйста, введите число от 1 до 28.",
+                    getRegistrationButtons()
+                  );
+                }
+                return res.status(200).json({ status: "ok" });
+              }
+
               // Обработка процесса регистрации
               const [tempRegistrations] = await db.query(
                 "SELECT * FROM temp_registrations WHERE viber_id = ?",
@@ -855,7 +886,12 @@ export default function viberRoutes(db) {
 
       // Отправляем уведомление, если пользователь подписан и включил уведомления
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
-        const message = `📊 Новое показание по участку ${users[0].plot_number}:\nДата: ${new Date(reading_date).toLocaleDateString('ru-RU')}\nЗначение: ${value} кВт⋅ч`;
+        const message = `📊 Новое показание по участку ${users[0].plot_number}:
+
+📅 Дата: ${new Date(reading_date).toLocaleDateString('ru-RU')}
+⚡ Значение: ${value} кВт⋅ч
+
+Для просмотра истории показаний используйте команду "показания"`;
         await sendViberMessage(users[0].viber_id, message, getCommandButtons());
       }
 
@@ -883,7 +919,14 @@ export default function viberRoutes(db) {
       // Отправляем уведомление, если пользователь подписан и включил уведомления
       if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
         const amount = (paid_reading * tariff).toFixed(2);
-        const message = `💰 Новая оплата по участку ${users[0].plot_number}:\nДата: ${new Date(payment_date).toLocaleDateString('ru-RU')}\nОплачено: ${paid_reading} кВт⋅ч\nСумма: ${amount} грн.`;
+        const message = `💰 Новая оплата по участку ${users[0].plot_number}:
+
+📅 Дата: ${new Date(payment_date).toLocaleDateString('ru-RU')}
+⚡ Оплачено: ${paid_reading} кВт⋅ч
+💵 Сумма: ${amount} грн.
+💰 Тариф: ${tariff} грн/кВт⋅ч
+
+Для просмотра истории оплат используйте команду "история оплат"`;
         await sendViberMessage(users[0].viber_id, message, getCommandButtons());
       }
 
