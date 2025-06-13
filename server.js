@@ -150,7 +150,6 @@ app.get("/api/users", authMiddleware, async (req, res) => {
         INNER JOIN (
           SELECT user_id, MAX(payment_date) AS max_date
           FROM payments
-          WHERE payment_date BETWEEN ? AND ?
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
