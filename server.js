@@ -602,28 +602,28 @@ async function generateReadingsPDF(userId, db) {
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
-  // Заголовок
-  doc.fontSize(20).text('Отчет по показаниям счетчика', { align: 'center' });
+  // Header
+  doc.fontSize(20).text('Meter Readings Report', { align: 'center' });
   doc.moveDown();
   
-  // Информация о пользователе
-  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
-  doc.text(`ФИО: ${user[0].full_name}`);
+  // User Information
+  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
+  doc.text(`Full Name: ${user[0].full_name}`);
   doc.moveDown();
   
-  // Таблица показаний
-  doc.fontSize(12).text('История показаний:', { underline: true });
+  // Readings Table
+  doc.fontSize(12).text('Readings History:', { underline: true });
   doc.moveDown();
   
-  // Заголовки таблицы
+  // Table Headers
   const tableTop = doc.y;
-  doc.text('Дата', 50, tableTop);
-  doc.text('Показание', 250, tableTop);
+  doc.text('Date', 50, tableTop);
+  doc.text('Reading', 250, tableTop);
   doc.moveDown();
   
-  // Данные таблицы
+  // Table Data
   readings.forEach(reading => {
-    const date = new Date(reading.reading_date).toLocaleDateString('ru-RU');
+    const date = new Date(reading.reading_date).toLocaleDateString('en-GB');
     doc.text(date, 50, doc.y);
     doc.text(reading.value.toString(), 250, doc.y);
     doc.moveDown();
@@ -652,31 +652,31 @@ async function generatePaymentsPDF(userId, db) {
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
-  // Заголовок
-  doc.fontSize(20).text('Отчет по оплатам', { align: 'center' });
+  // Header
+  doc.fontSize(20).text('Payments Report', { align: 'center' });
   doc.moveDown();
   
-  // Информация о пользователе
-  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
-  doc.text(`ФИО: ${user[0].full_name}`);
+  // User Information
+  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
+  doc.text(`Full Name: ${user[0].full_name}`);
   doc.moveDown();
   
-  // Таблица оплат
-  doc.fontSize(12).text('История оплат:', { underline: true });
+  // Payments Table
+  doc.fontSize(12).text('Payment History:', { underline: true });
   doc.moveDown();
   
-  // Заголовки таблицы
+  // Table Headers
   const tableTop = doc.y;
-  doc.text('Дата', 50, tableTop);
-  doc.text('Оплачено (кВт⋅ч)', 150, tableTop);
-  doc.text('Тариф', 250, tableTop);
-  doc.text('Сумма', 350, tableTop);
-  doc.text('Долг', 450, tableTop);
+  doc.text('Date', 50, tableTop);
+  doc.text('Paid (kWh)', 150, tableTop);
+  doc.text('Rate', 250, tableTop);
+  doc.text('Amount', 350, tableTop);
+  doc.text('Debt', 450, tableTop);
   doc.moveDown();
   
-  // Данные таблицы
+  // Table Data
   payments.forEach(payment => {
-    const date = new Date(payment.payment_date).toLocaleDateString('ru-RU');
+    const date = new Date(payment.payment_date).toLocaleDateString('en-GB');
     const sum = payment.paid_reading && payment.tariff ? (payment.paid_reading * payment.tariff).toFixed(2) : '-';
     doc.text(date, 50, doc.y);
     doc.text(payment.paid_reading?.toString() || '-', 150, doc.y);
@@ -713,29 +713,29 @@ async function generateFullReportPDF(userId, db) {
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
-  // Заголовок
-  doc.fontSize(20).text('Полный отчет', { align: 'center' });
+  // Header
+  doc.fontSize(20).text('Complete Report', { align: 'center' });
   doc.moveDown();
   
-  // Информация о пользователе
-  doc.fontSize(12).text(`Участок: ${user[0].plot_number}`);
-  doc.text(`ФИО: ${user[0].full_name}`);
-  doc.text(`Телефон: ${user[0].phone || '-'}`);
-  doc.text(`Viber: ${user[0].has_viber ? 'Зарегистрирован' : 'Не зарегистрирован'}`);
+  // User Information
+  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
+  doc.text(`Full Name: ${user[0].full_name}`);
+  doc.text(`Phone: ${user[0].phone || '-'}`);
+  doc.text(`Viber: ${user[0].has_viber ? 'Registered' : 'Not Registered'}`);
   doc.moveDown();
   
-  // Показания
-  doc.fontSize(14).text('История показаний:', { underline: true });
+  // Readings
+  doc.fontSize(14).text('Meter Readings History:', { underline: true });
   doc.moveDown();
   
   const readingsTableTop = doc.y;
   doc.fontSize(12);
-  doc.text('Дата', 50, readingsTableTop);
-  doc.text('Показание', 250, readingsTableTop);
+  doc.text('Date', 50, readingsTableTop);
+  doc.text('Reading', 250, readingsTableTop);
   doc.moveDown();
   
   readings.forEach(reading => {
-    const date = new Date(reading.reading_date).toLocaleDateString('ru-RU');
+    const date = new Date(reading.reading_date).toLocaleDateString('en-GB');
     doc.text(date, 50, doc.y);
     doc.text(reading.value.toString(), 250, doc.y);
     doc.moveDown();
@@ -743,21 +743,21 @@ async function generateFullReportPDF(userId, db) {
   
   doc.addPage();
   
-  // Оплаты
-  doc.fontSize(14).text('История оплат:', { underline: true });
+  // Payments
+  doc.fontSize(14).text('Payment History:', { underline: true });
   doc.moveDown();
   
   const paymentsTableTop = doc.y;
   doc.fontSize(12);
-  doc.text('Дата', 50, paymentsTableTop);
-  doc.text('Оплачено (кВт⋅ч)', 150, paymentsTableTop);
-  doc.text('Тариф', 250, paymentsTableTop);
-  doc.text('Сумма', 350, paymentsTableTop);
-  doc.text('Долг', 450, paymentsTableTop);
+  doc.text('Date', 50, paymentsTableTop);
+  doc.text('Paid (kWh)', 150, paymentsTableTop);
+  doc.text('Rate', 250, paymentsTableTop);
+  doc.text('Amount', 350, paymentsTableTop);
+  doc.text('Debt', 450, paymentsTableTop);
   doc.moveDown();
   
   payments.forEach(payment => {
-    const date = new Date(payment.payment_date).toLocaleDateString('ru-RU');
+    const date = new Date(payment.payment_date).toLocaleDateString('en-GB');
     const sum = payment.paid_reading && payment.tariff ? (payment.paid_reading * payment.tariff).toFixed(2) : '-';
     doc.text(date, 50, doc.y);
     doc.text(payment.paid_reading?.toString() || '-', 150, doc.y);
