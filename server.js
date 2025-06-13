@@ -341,8 +341,7 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
 
 📅 Дата: ${new Date(payment_date).toLocaleDateString('ru-RU')}
 ⚡ Оплачено: ${paid_reading} кВт⋅ч
-💵 Сумма: ${(paid_reading * tariff).toFixed(2)} грн.
-💰 Тариф: ${tariff} грн/кВт⋅ч
+💵 Сумма: ${Math.round(paid_reading * tariff)} грн.
 
 Для просмотра истории оплат используйте команду "история оплат"`;
 
