@@ -173,7 +173,7 @@ export default function viberRoutes(db) {
    * @param {number} months - Количество месяцев для расчета
    * @returns {number|null} Средний расход или null при недостатке данных
    */
-  async function calculateAverageConsumption(userId, months = 3) {
+  async function calculateAverageConsumption(userId, months = 5) {
     // Получаем показания счетчика за последние N месяцев
     const [readings] = await db.query(
       `SELECT reading_date, value 
@@ -272,7 +272,7 @@ export default function viberRoutes(db) {
 Удалите привязку между вашим Viber-аккаунтом и участком. После этого команды бота станут недоступны до повторной привязки.
 
 ❓ *Помощь*  
-Показать этот список команд. Используйте её, если забыли, какие функции доступны в боте.
+Показать этот список команд. Используйте её, если забыли, какие функции доступны в боте.Средний расход
 `;
               await sendViberMessage(viber_id, helpMessage, getCommandButtons());
               await db.query(
