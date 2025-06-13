@@ -235,32 +235,30 @@ app.get("/api/users", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/readings", authMiddleware, async (req, res) => {
-  const { user_id, reading_date, value } = req.body;
-  if (!user_id || !reading_date || value == null) {
-    return res.status(400).json({ error: "Не все поля заполнены" });
-  }
-
   try {
-    // Проверяем, есть ли уже показания за эту дату
-    const [existing] = await db.query(
-      "SELECT id FROM readings WHERE user_id = ? AND reading_date = ?",
-      [user_id, reading_date]
-    );
-
-    if (existing.length > 0) {
-      return res.status(400).json({ 
-        error: "Показания за эту дату уже существуют",
-        details: "Нельзя ввести показания дважды за один день"
-      });
-    }
-
-    await db.query(
-      `INSERT INTO readings (user_id, reading_date, value) VALUES (?, ?, ?)`,
+    const { user_id, reading_date, value } = req.body;
+    
+    // Добавляем показание
+    const [result] = await db.query(
+      "INSERT INTO readings (user_id, reading_date, value) VALUES (?, ?, ?)",
       [user_id, reading_date, value]
     );
-    res.json({ success: true });
+
+    // Отправляем уведомление о новом показании
+    try {
+      await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/notify-reading`, {
+        user_id,
+        reading_date,
+        value
+      });
+    } catch (err) {
+      console.error("Error sending reading notification:", err);
+    }
+
+    res.json({ id: result.insertId });
   } catch (err) {
-    res.status(500).json({ error: "Ошибка вставки", details: err.message });
+    console.error("Error in /api/readings:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
@@ -275,40 +273,38 @@ app.delete("/api/readings/:id", authMiddleware, async (req, res) => {
 });
 
 app.post("/api/payments", authMiddleware, async (req, res) => {
-  const { user_id, payment_date, paid_reading } = req.body;
-
-  if (!user_id || !payment_date || paid_reading == null) {
-    return res.status(400).json({ message: "Не все поля заполнены" });
-  }
-
   try {
-    const [[lastReading]] = await db.query(
-      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
-      [user_id]
-    );
-
-    if (!lastReading) {
-      return res.status(400).json({ message: "Нет показаний для пользователя" });
-    }
-
-    const unpaid_kwh = lastReading.value - paid_reading;
-
+    const { user_id, payment_date, paid_reading, amount } = req.body;
+    
+    // Получаем текущий тариф
     const [[tariffRow]] = await db.query(
       `SELECT value FROM tariff WHERE effective_date <= ? ORDER BY effective_date DESC LIMIT 1`,
       [payment_date]
     );
     const tariff = tariffRow?.value || 4.75;
-    const debt = unpaid_kwh * tariff;
 
-    await db.query(
-      `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt)
-       VALUES (?, ?, ?, ?, ?)`,
-      [user_id, payment_date, paid_reading, unpaid_kwh, debt]
+    // Добавляем оплату
+    const [result] = await db.query(
+      "INSERT INTO payments (user_id, payment_date, paid_reading, amount) VALUES (?, ?, ?, ?)",
+      [user_id, payment_date, paid_reading, amount]
     );
 
-    res.json({ success: true });
+    // Отправляем уведомление о новой оплате
+    try {
+      await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/notify-payment`, {
+        user_id,
+        payment_date,
+        paid_reading,
+        tariff
+      });
+    } catch (err) {
+      console.error("Error sending payment notification:", err);
+    }
+
+    res.json({ id: result.insertId });
   } catch (err) {
-    res.status(500).json({ message: "Ошибка при добавлении оплаты", details: err.message });
+    console.error("Error in /api/payments:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
@@ -915,67 +911,57 @@ async function sendReminders() {
   try {
     const today = new Date();
     const currentDay = today.getDate();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
 
-    // Получаем пользователей, которым нужно отправить напоминание
-    const [users] = await db.query(`
-      SELECT u.id, u.plot_number, u.viber_id, u.notifications_enabled,
-             r_last.value as last_reading,
-             r_last.reading_date as last_reading_date
-      FROM users u
-      LEFT JOIN (
-        SELECT r1.*
-        FROM readings r1
-        INNER JOIN (
-          SELECT user_id, MAX(reading_date) AS max_date
-          FROM readings
-          GROUP BY user_id
-        ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
-      ) r_last ON u.id = r_last.user_id
-      WHERE u.reminder_day = ? 
-        AND u.viber_id IS NOT NULL 
-        AND u.notifications_enabled = 1
-    `, [currentDay]);
-
-    console.log(`Found ${users.length} users to send reminders to`);
+    // Получаем пользователей, у которых сегодня день напоминания
+    const [users] = await db.query(
+      `SELECT u.id, u.viber_id, u.plot_number, u.reminder_day 
+       FROM users u 
+       WHERE u.reminder_day = ? 
+       AND u.viber_id IS NOT NULL 
+       AND u.notifications_enabled = 1`,
+      [currentDay]
+    );
 
     for (const user of users) {
-      // Проверяем, было ли показание в текущем месяце
-      const lastReadingDate = user.last_reading_date ? new Date(user.last_reading_date) : null;
-      const isReadingThisMonth = lastReadingDate && 
-                                lastReadingDate.getMonth() === today.getMonth() && 
-                                lastReadingDate.getFullYear() === today.getFullYear();
+      // Проверяем, есть ли уже показания за текущий месяц
+      const [readings] = await db.query(
+        `SELECT id FROM readings 
+         WHERE user_id = ? 
+         AND MONTH(reading_date) = ? 
+         AND YEAR(reading_date) = ?`,
+        [user.id, currentMonth + 1, currentYear]
+      );
 
-      if (!isReadingThisMonth) {
-        // Отправляем напоминание через Viber API
-        const message = `⏰ Напоминание!\n\nПожалуйста, не забудьте передать показания счетчика за ${today.toLocaleString('ru-RU', { month: 'long' })}.\n\nПоследнее показание: ${user.last_reading || 'нет данных'}`;
-        
+      // Если показаний еще нет, отправляем напоминание
+      if (readings.length === 0) {
+        const message = `⏰ Напоминание по участку ${user.plot_number}:
+
+❗️ Пожалуйста, не забудьте передать показания счетчика за текущий месяц.
+
+Для передачи показаний используйте команду "показания" в меню бота.`;
+
         try {
-          await axios.post("https://chatapi.viber.com/pa/send_message", {
-            receiver: user.viber_id,
-            type: "text",
-            text: message
-          }, {
-            headers: {
-              "X-Viber-Auth-Token": process.env.VIBER_AUTH_TOKEN || '507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366'
-            }
+          await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/send-message`, {
+            viber_id: user.viber_id,
+            message: message
           });
 
           // Логируем отправку напоминания
           await db.query(
             `INSERT INTO notifications (user_id, message, via, success) 
              VALUES (?, ?, 'viber', true)`,
-            [user.id, message]
+            [user.id, `Отправлено напоминание о передаче показаний`]
           );
-
-          console.log(`Sent reminder to user ${user.plot_number}`);
         } catch (err) {
-          console.error(`Error sending reminder to user ${user.plot_number}:`, err);
+          console.error(`Error sending reminder to user ${user.id}:`, err);
           
-          // Логируем ошибку
+          // Логируем ошибку отправки
           await db.query(
             `INSERT INTO notifications (user_id, message, via, success) 
              VALUES (?, ?, 'viber', false)`,
-            [user.id, `Failed to send reminder: ${err.message}`]
+            [user.id, `Ошибка отправки напоминания: ${err.message}`]
           );
         }
       }
@@ -985,7 +971,7 @@ async function sendReminders() {
   }
 }
 
-// Запускаем проверку напоминаний каждый день в 9:00
+// Запускаем отправку напоминаний каждый день в 9:00
 setInterval(() => {
   const now = new Date();
   if (now.getHours() === 9 && now.getMinutes() === 0) {
