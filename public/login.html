@@ -11,27 +11,28 @@
       background-position: center;
       background-repeat: no-repeat;
       min-height: 100vh;
+      position: relative;
     }
-    .login-container {
-      background-color: rgba(255, 255, 255, 0.9);
-      border-radius: 10px;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+    body::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1;
     }
-    .captcha-container {
-      background-color: #f8f9fa;
-      padding: 10px;
-      border-radius: 5px;
-      margin-bottom: 15px;
-    }
-    .captcha-numbers {
-      font-size: 1.2em;
-      font-weight: bold;
-      color: #0d6efd;
+    .card {
+      position: relative;
+      z-index: 2;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(5px);
     }
   </style>
 </head>
 <body class="d-flex justify-content-center align-items-center">
-  <div class="card login-container shadow p-4" style="min-width: 300px;">
+  <div class="card shadow p-4" style="min-width: 300px;">
     <h4 class="mb-3 text-center">Авторизация</h4>
     <form id="loginForm">
       <div class="mb-3">
@@ -43,11 +44,8 @@
         <input type="password" class="form-control" id="password" required />
       </div>
       <div class="mb-3">
-        <div class="captcha-container">
-          <label class="form-label">Введите сумму чисел:</label>
-          <div class="captcha-numbers mb-2" id="captchaNumbers"></div>
-          <input type="number" class="form-control" id="captcha" name="captcha" required min="0" max="19">
-        </div>
+        <label for="captcha" class="form-label">Сколько будет 3 + 4?</label>
+        <input type="text" class="form-control" id="captcha" name="captcha" required>
       </div>
       <button type="submit" class="btn btn-primary w-100">Войти</button>
     </form>
@@ -57,42 +55,14 @@
   <script>
     const form = document.getElementById("loginForm");
     const message = document.getElementById("message");
-    const captchaNumbers = document.getElementById("captchaNumbers");
-    let currentSum = 0;
-
-    function generateCaptcha() {
-      // Генерируем два случайных числа, сумма которых меньше 20
-      const num1 = Math.floor(Math.random() * 10); // 0-9
-      const num2 = Math.floor(Math.random() * (19 - num1)); // 0 до (19 - num1)
-      currentSum = num1 + num2;
-      captchaNumbers.textContent = `${num1} + ${num2} = ?`;
-    }
-
-    // Генерируем капчу при загрузке страницы
-    generateCaptcha();
-
-    // Обновляем капчу при каждом неверном вводе
-    document.getElementById("captcha").addEventListener("input", function() {
-      if (this.value.length > 2) { // Если введено больше 2 цифр
-        this.value = this.value.slice(0, 2); // Оставляем только первые 2 цифры
-      }
-    });
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const userSum = parseInt(form.captcha.value);
-      if (userSum !== currentSum) {
-        message.textContent = "Неверная сумма чисел";
-        generateCaptcha(); // Генерируем новую капчу
-        form.captcha.value = ""; // Очищаем поле ввода
-        return;
-      }
-
       const payload = {
         login: form.login.value,
         password: form.password.value,
-        captcha: userSum,
+        captcha: form.captcha.value,
       };
 
       const res = await fetch("/api/login", {
@@ -107,8 +77,6 @@
         window.location.href = "/index.html";
       } else {
         message.textContent = "Неверный логин или пароль";
-        generateCaptcha(); // Генерируем новую капчу при ошибке
-        form.captcha.value = ""; // Очищаем поле ввода
       }
     });
   </script>
