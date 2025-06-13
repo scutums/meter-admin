@@ -598,7 +598,9 @@ async function generateReadingsPDF(userId, db) {
     [userId]
   );
 
-  const doc = new PDFDocument();
+  const doc = new PDFDocument({
+    font: 'Helvetica'
+  });
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
@@ -607,8 +609,13 @@ async function generateReadingsPDF(userId, db) {
   doc.moveDown();
   
   // User Information
-  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
-  doc.text(`Full Name: ${user[0].full_name}`);
+  doc.fontSize(12);
+  doc.text('Plot Number:', 50, doc.y);
+  doc.text(user[0].plot_number, 150, doc.y);
+  doc.moveDown();
+  
+  doc.text('Full Name:', 50, doc.y);
+  doc.text(user[0].full_name, 150, doc.y);
   doc.moveDown();
   
   // Readings Table
@@ -648,7 +655,9 @@ async function generatePaymentsPDF(userId, db) {
     [userId]
   );
 
-  const doc = new PDFDocument();
+  const doc = new PDFDocument({
+    font: 'Helvetica'
+  });
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
@@ -657,8 +666,13 @@ async function generatePaymentsPDF(userId, db) {
   doc.moveDown();
   
   // User Information
-  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
-  doc.text(`Full Name: ${user[0].full_name}`);
+  doc.fontSize(12);
+  doc.text('Plot Number:', 50, doc.y);
+  doc.text(user[0].plot_number, 150, doc.y);
+  doc.moveDown();
+  
+  doc.text('Full Name:', 50, doc.y);
+  doc.text(user[0].full_name, 150, doc.y);
   doc.moveDown();
   
   // Payments Table
@@ -709,7 +723,9 @@ async function generateFullReportPDF(userId, db) {
     [userId]
   );
 
-  const doc = new PDFDocument();
+  const doc = new PDFDocument({
+    font: 'Helvetica'
+  });
   const buffers = [];
   doc.on('data', buffers.push.bind(buffers));
   
@@ -718,10 +734,21 @@ async function generateFullReportPDF(userId, db) {
   doc.moveDown();
   
   // User Information
-  doc.fontSize(12).text(`Plot Number: ${user[0].plot_number}`);
-  doc.text(`Full Name: ${user[0].full_name}`);
-  doc.text(`Phone: ${user[0].phone || '-'}`);
-  doc.text(`Viber: ${user[0].has_viber ? 'Registered' : 'Not Registered'}`);
+  doc.fontSize(12);
+  doc.text('Plot Number:', 50, doc.y);
+  doc.text(user[0].plot_number, 150, doc.y);
+  doc.moveDown();
+  
+  doc.text('Full Name:', 50, doc.y);
+  doc.text(user[0].full_name, 150, doc.y);
+  doc.moveDown();
+  
+  doc.text('Phone:', 50, doc.y);
+  doc.text(user[0].phone || '-', 150, doc.y);
+  doc.moveDown();
+  
+  doc.text('Viber:', 50, doc.y);
+  doc.text(user[0].has_viber ? 'Registered' : 'Not Registered', 150, doc.y);
   doc.moveDown();
   
   // Readings
