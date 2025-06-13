@@ -153,7 +153,13 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number
     `;
     const sqlAll = `
       SELECT 
@@ -203,7 +209,13 @@ app.get("/api/users", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number
     `;
     if (month) {
       const { from, to } = getMonthRange(month);
@@ -395,7 +407,13 @@ app.get("/api/last-readings", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) r2 ON r1.user_id = r2.user_id AND r1.reading_date = r2.max_date
       ) r ON u.id = r.user_id
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number
     `);
     res.json(rows);
   } catch (err) {
@@ -425,7 +443,13 @@ app.get("/api/last-payments", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number
     `);
     res.json(rows);
   } catch (err) {
@@ -435,21 +459,26 @@ app.get("/api/last-payments", authMiddleware, async (req, res) => {
 
 // Получить показания за период
 app.get("/api/readings", authMiddleware, async (req, res) => {
-  const { from, to } = req.query;
-  if (!from || !to) {
-    return res.status(400).json({ error: "Необходимо указать параметры from и to" });
-  }
   try {
+    const { from, to } = req.query;
     const [rows] = await db.query(`
       SELECT u.plot_number, u.full_name, r.reading_date, r.value
       FROM readings r
       JOIN users u ON r.user_id = u.id
       WHERE r.reading_date BETWEEN ? AND ?
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number, r.reading_date
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number, 
+        r.reading_date
     `, [from, to]);
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: "Ошибка получения показаний", details: err.message });
+    console.error("Ошибка в /api/readings:", err);
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 });
 
@@ -479,7 +508,13 @@ app.get("/api/user-payments/:id", authMiddleware, async (req, res) => {
          (SELECT value FROM tariff WHERE effective_date <= p.payment_date ORDER BY effective_date DESC LIMIT 1) AS tariff
        FROM payments p
        WHERE p.user_id = ?
-       ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+       ORDER BY 
+         CASE 
+           WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+           ELSE 0 
+         END,
+         CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+         u.plot_number
     `,
       [id]
     );
@@ -534,7 +569,13 @@ app.get("/api/payments/last-stats", authMiddleware, async (req, res) => {
           GROUP BY user_id
         ) p2 ON p1.user_id = p2.user_id AND p1.payment_date = p2.max_date
       ) p ON u.id = p.user_id
-      ORDER BY CAST(REGEXP_REPLACE(plot_number, '[^0-9]', '') AS UNSIGNED), plot_number
+      ORDER BY 
+        CASE 
+          WHEN u.plot_number IN ('Ск1', 'Ск2', 'Ск3', 'Союз') THEN 1 
+          ELSE 0 
+        END,
+        CAST(REGEXP_REPLACE(u.plot_number, '[^0-9]', '') AS UNSIGNED), 
+        u.plot_number
     `);
     res.json(rows);
   } catch (err) {
