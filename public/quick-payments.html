@@ -220,13 +220,15 @@
             Authorization: 'Bearer ' + localStorage.getItem('token')
           },
           body: JSON.stringify({
-            user_id: user.id || user.user_id,
+            user_id: user.id,
             payment_date: date,
             paid_reading: reading
           })
         });
 
         if (resp.ok) {
+          const result = await resp.json();
+          console.log('Payment saved:', result);
           payStatus.textContent = '✔';
           payStatus.className = 'pay-status ms-2 text-success';
           // Обновить таблицу после оплаты
@@ -234,6 +236,7 @@
           if (typeof init === 'function') init(month);
         } else {
           const err = await resp.json();
+          console.error('Payment error:', err);
           payStatus.textContent = 'Ошибка';
           payStatus.className = 'pay-status ms-2 text-danger';
         }

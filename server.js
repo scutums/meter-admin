@@ -274,20 +274,50 @@ app.delete("/api/readings/:id", authMiddleware, async (req, res) => {
 
 app.post("/api/payments", authMiddleware, async (req, res) => {
   try {
-    const { user_id, payment_date, paid_reading, amount } = req.body;
+    console.log('Received payment request:', req.body);
+    const { user_id, payment_date, paid_reading } = req.body;
     
+    if (!user_id || !payment_date || paid_reading == null) {
+      console.log('Missing required fields:', { user_id, payment_date, paid_reading });
+      return res.status(400).json({ error: "Не все поля заполнены" });
+    }
+
+    // Получаем последнее показание
+    const [[lastReading]] = await db.query(
+      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
+      [user_id]
+    );
+
+    console.log('Last reading:', lastReading);
+
+    if (!lastReading) {
+      console.log('No readings found for user:', user_id);
+      return res.status(400).json({ error: "Нет показаний для пользователя" });
+    }
+
+    // Рассчитываем неоплаченные кВт⋅ч
+    const unpaid_kwh = lastReading.value - paid_reading;
+    console.log('Calculated unpaid_kwh:', unpaid_kwh);
+
     // Получаем текущий тариф
     const [[tariffRow]] = await db.query(
       `SELECT value FROM tariff WHERE effective_date <= ? ORDER BY effective_date DESC LIMIT 1`,
       [payment_date]
     );
     const tariff = tariffRow?.value || 4.75;
+    console.log('Current tariff:', tariff);
+
+    // Рассчитываем долг
+    const debt = unpaid_kwh * tariff;
+    console.log('Calculated debt:', debt);
 
     // Добавляем оплату
     const [result] = await db.query(
-      "INSERT INTO payments (user_id, payment_date, paid_reading, amount) VALUES (?, ?, ?, ?)",
-      [user_id, payment_date, paid_reading, amount]
+      `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [user_id, payment_date, paid_reading, unpaid_kwh, debt]
     );
+    console.log('Payment inserted with ID:', result.insertId);
 
     // Отправляем уведомление о новой оплате
     try {
@@ -297,11 +327,17 @@ app.post("/api/payments", authMiddleware, async (req, res) => {
         paid_reading,
         tariff
       });
+      console.log('Payment notification sent');
     } catch (err) {
       console.error("Error sending payment notification:", err);
     }
 
-    res.json({ id: result.insertId });
+    res.json({ 
+      id: result.insertId,
+      unpaid_kwh,
+      debt,
+      tariff
+    });
   } catch (err) {
     console.error("Error in /api/payments:", err);
     res.status(500).json({ error: "Database error", details: err.message });
