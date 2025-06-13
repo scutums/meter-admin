@@ -43,7 +43,29 @@ try {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Middleware для защиты HTML файлов
+function protectHtmlFiles(req, res, next) {
+  if (req.path.endsWith('.html') && req.path !== '/login.html') {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.redirect('/login.html');
+    }
+    const token = authHeader.split(" ")[1];
+    try {
+      jwt.verify(token, process.env.JWT_SECRET);
+      next();
+    } catch {
+      res.redirect('/login.html');
+    }
+  } else {
+    next();
+  }
+}
+
+// Настройка статических файлов с защитой
 app.use(express.static(path.join(__dirname, "public")));
+app.use(protectHtmlFiles);
 
 // Добавляем маршруты Viber
 app.use("/viber", viberRoutes(db));
