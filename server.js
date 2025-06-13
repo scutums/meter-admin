@@ -274,84 +274,134 @@ app.delete("/api/readings/:id", authMiddleware, async (req, res) => {
 
 app.post("/api/payments", authMiddleware, async (req, res) => {
   try {
-    console.log('Received payment request:', req.body);
     const { user_id, payment_date, paid_reading } = req.body;
     
-    if (!user_id || !payment_date || paid_reading == null) {
-      console.log('Missing required fields:', { user_id, payment_date, paid_reading });
-      return res.status(400).json({ error: "Не все поля заполнены" });
+    // Проверяем наличие всех необходимых полей
+    if (!user_id || !payment_date || !paid_reading) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Получаем последнее показание
-    const [[lastReading]] = await db.query(
-      `SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1`,
+    console.log('Received payment request:', req.body);
+
+    // Получаем последнее показание пользователя
+    const [readings] = await db.query(
+      "SELECT value FROM readings WHERE user_id = ? ORDER BY reading_date DESC LIMIT 1",
       [user_id]
     );
 
-    console.log('Last reading:', lastReading);
+    console.log('Last reading:', readings[0]);
 
-    if (!lastReading) {
-      console.log('No readings found for user:', user_id);
-      return res.status(400).json({ error: "Нет показаний для пользователя" });
+    if (readings.length === 0) {
+      return res.status(400).json({ error: "No previous readings found" });
     }
 
-    // Рассчитываем неоплаченные кВт⋅ч
-    const unpaid_kwh = lastReading.value - paid_reading;
+    const lastReading = readings[0].value;
+    const unpaid_kwh = lastReading - paid_reading;
+
     console.log('Calculated unpaid_kwh:', unpaid_kwh);
 
     // Получаем текущий тариф
-    const [[tariffRow]] = await db.query(
-      `SELECT value FROM tariff WHERE effective_date <= ? ORDER BY effective_date DESC LIMIT 1`,
+    const [tariffs] = await db.query(
+      "SELECT value FROM tariff WHERE effective_date <= ? ORDER BY effective_date DESC LIMIT 1",
       [payment_date]
     );
-    const tariff = tariffRow?.value || 4.75;
-    console.log('Current tariff:', tariff);
 
-    // Рассчитываем долг
+    if (tariffs.length === 0) {
+      return res.status(400).json({ error: "No tariff found for the payment date" });
+    }
+
+    const tariff = tariffs[0].value;
     const debt = unpaid_kwh * tariff;
+
+    console.log('Current tariff:', tariff);
     console.log('Calculated debt:', debt);
 
-    // Добавляем оплату
+    // Вставляем оплату
     const [result] = await db.query(
       `INSERT INTO payments (user_id, payment_date, paid_reading, unpaid_kwh, debt) 
        VALUES (?, ?, ?, ?, ?)`,
       [user_id, payment_date, paid_reading, unpaid_kwh, debt]
     );
+
     console.log('Payment inserted with ID:', result.insertId);
 
     // Отправляем уведомление о новой оплате
     try {
       // Получаем информацию о пользователе для уведомления
-      const [[userInfo]] = await db.query(
+      const [users] = await db.query(
         "SELECT viber_id, notifications_enabled, plot_number FROM users WHERE id = ?",
         [user_id]
       );
 
-      if (userInfo && userInfo.viber_id && userInfo.notifications_enabled) {
-        console.log('Sending payment notification to user:', userInfo);
-        await axios.post(`${process.env.BASE_URL || 'http://localhost:3000'}/api/viber/notify-payment`, {
-          user_id,
-          payment_date,
-          paid_reading,
-          tariff
+      console.log('Sending payment notification to user:', users[0]);
+
+      if (users.length > 0 && users[0].viber_id && users[0].notifications_enabled) {
+        // Отправляем уведомление через Viber API напрямую
+        const message = `💰 Новая оплата по участку ${users[0].plot_number}:
+
+📅 Дата: ${new Date(payment_date).toLocaleDateString('ru-RU')}
+⚡ Оплачено: ${paid_reading} кВт⋅ч
+💵 Сумма: ${(paid_reading * tariff).toFixed(2)} грн.
+💰 Тариф: ${tariff} грн/кВт⋅ч
+
+Для просмотра истории оплат используйте команду "история оплат"`;
+
+        const messageData = {
+          receiver: users[0].viber_id,
+          type: "text",
+          text: message,
+          keyboard: {
+            Type: "keyboard",
+            Buttons: [
+              { text: "📋 Инфо", command: "инфо" },
+              { text: "📊 Показания", command: "показания" },
+              { text: "💰 История оплат", command: "оплата" }
+            ].map(button => ({
+              Columns: 3,
+              Rows: 1,
+              Text: button.text,
+              ActionType: "reply",
+              ActionBody: button.command,
+              TextSize: "regular",
+              TextHAlign: "center",
+              TextVAlign: "middle",
+              BgColor: "#FFFFFF",
+              TextColor: "#000000",
+              BorderWidth: 3,
+              BorderColor: "#7367F0",
+              Silent: false
+            }))
+          }
+        };
+
+        await axios.post("https://chatapi.viber.com/pa/send_message", messageData, {
+          headers: {
+            "X-Viber-Auth-Token": process.env.VIBER_AUTH_TOKEN || '507a9cdad4e7e728-44afb7e01b8d3350-b88a8c0308784366'
+          }
         });
+
+        // Логируем отправку уведомления
+        await db.query(
+          `INSERT INTO notifications (user_id, message, via, success) 
+           VALUES (?, ?, 'viber', true)`,
+          [user_id, `Отправлено уведомление о новой оплате`]
+        );
+
         console.log('Payment notification sent successfully');
       } else {
-        console.log('Skipping notification - user not configured:', userInfo);
+        console.log('Skipping notification - user not configured or notifications disabled');
       }
     } catch (err) {
       console.error("Error sending payment notification:", err);
-      // Не прерываем выполнение запроса при ошибке уведомления
+      // Не прерываем выполнение запроса при ошибке отправки уведомления
     }
 
     res.json({ 
-      id: result.insertId,
-      unpaid_kwh,
-      debt,
-      tariff
+      message: "Payment recorded successfully",
+      payment_id: result.insertId
     });
   } catch (err) {
-    console.error("Error in /api/payments:", err);
+    console.error("Error recording payment:", err);
     res.status(500).json({ error: "Database error", details: err.message });
   }
 });
